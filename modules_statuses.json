@@ -1,0 +1,7 @@
+{
+    "RBAC": true,
+    "Employee": true,
+    "Organization": true,
+    "Localization": true,
+    "Leave": true
+}
