@@ -5,6 +5,7 @@ namespace Modules\Leave\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Modules\Leave\Models\LeaveEntitlement;
+use Modules\Leave\Models\LeaveType;
 use Modules\Leave\Transformers\LeaveEntitlementResource as LeaveEntitlementResource;
 
 class LeaveEntitlementController extends Controller
@@ -13,55 +14,89 @@ class LeaveEntitlementController extends Controller
      * Display a listing of the resource.
      */
     public function index()
-    {
-        $user = auth()->user(); // Get the authenticated user
+{
+    $user = auth()->user(); // Get the authenticated user
 
-        if ($user->hasRole('Administrator')) {
-            // Admin: fetch all leave entitlements
-            $leaveEntitlements = LeaveEntitlement::with(['employee.user'])
-                ->where('is_active', 1)
-                ->get() // Retrieve all results (not paginated initially)
-                ->groupBy('employee_id'); // Group by employee ID
-        } else {
-            // Employee: fetch leave entitlements for the specific employee
-            $employee = $user->employee; // Get the employee record associated with the user
+    // Fetch all leave types for consistency
+    $leaveTypes = LeaveType::pluck('type_name', 'id'); // Assuming LeaveType model exists
 
-            if (!$employee) {
-                abort(403, 'Employee record not found');
-            }
+    // Result container
+    $result = [];
 
-            $leaveEntitlements = LeaveEntitlement::where('employee_id', $employee->id)
-                ->where('is_active', 1)
-                ->paginate(10); // Paginate for employees
+    if ($user->hasRole('Administrator')) {
+        // Admin: fetch all leave entitlements
+        $leaveEntitlements = LeaveEntitlement::with(['employee.user', 'leavetype'])
+            ->where('is_active', 1)
+            ->get()
+            ->groupBy('employee_id'); // Group by employee ID
+
+        foreach ($leaveEntitlements as $employeeId => $entitlements) {
+            $firstEntitlement = $entitlements->first(); // Use the first record to get employee details
+            $employee = $firstEntitlement->employee;
+
+            // Prepare entitlement summary for each leave type
+            $leaveSummary = $this->formatEntitlements($entitlements, $leaveTypes);
+
+            $result[] = [
+                'employee' => [
+                    'id' => $employee->id,
+                    'name' => $employee->user->name, // Assuming 'name' exists in users table
+                ],
+                'leave_entitlements' => $leaveSummary,
+            ];
+        }
+    } else {
+        // Employee: fetch entitlements for the logged-in employee
+        $employee = $user->employee;
+
+        if (!$employee) {
+            abort(403, 'Employee record not found');
         }
 
-        // If Admin, handle grouped results manually
-        $result = [];
-        if ($user->hasRole('Administrator')) {
-            foreach ($leaveEntitlements as $employeeId => $entitlements) {
-                $firstEntitlement = $entitlements->first(); // Get first entitlement for employee details
+        $entitlements = LeaveEntitlement::with(['leavetype'])
+            ->where('employee_id', $employee->id)
+            ->where('is_active', 1)
+            ->get();
 
-                // Prepare entitlement types and values
-                $leaveSummary = $this->formatEntitlements($entitlements);
+        // Prepare entitlement summary for each leave type
+        $leaveSummary = $this->formatEntitlements($entitlements, $leaveTypes);
 
-                $result[] = array_merge([
-                    'employee' => $firstEntitlement->employee, // Use the first record to get employee details
-                ], $leaveSummary);
-            }
-
-            return response()->json($result); // Return grouped results
-        }
-
-        // For employees, format and return directly paginated results
-        $result = [];
-        foreach ($leaveEntitlements as $entitlement) {
-            $result[] = array_merge([
-                'employee' => $entitlement->employee,
-            ], $this->formatEntitlements([$entitlement]));
-        }
-
-        return response()->json($result);
+        $result[] = [
+            'employee' => [
+                'id' => $employee->id,
+                'name' => $user->name,
+            ],
+            'leave_entitlements' => $leaveSummary,
+        ];
     }
+
+    // Return the final JSON result
+    return response()->json($result);
+}
+
+/**
+ * Format leave entitlements based on all leave types.
+ */
+private function formatEntitlements($entitlements, $leaveTypes)
+{
+    $leaveSummary = [];
+
+    // Initialize all leave types with 0
+    foreach ($leaveTypes as $typeName) {
+        $leaveSummary[$typeName] = 0; // Default value
+    }
+
+    // Populate actual values from entitlements
+    foreach ($entitlements as $entitlement) {
+        $leaveType = $entitlement->leavetype->type_name; // Assuming 'type_name' exists
+        $balance = $entitlement->ent_amount;            // Get entitlement amount
+
+        $leaveSummary[$leaveType] = $balance;           // Add or update the value
+    }
+
+    return $leaveSummary;
+}
+
 
     /**
      * Display a paginated listing of the resource.
@@ -117,27 +152,6 @@ class LeaveEntitlementController extends Controller
 
         return response()->json($result);
     }
-
-    /**
-     * Format entitlements for output
-     */
-    private function formatEntitlements($entitlements)
-    {
-        $leaveSummary = [];
-
-        foreach ($entitlements as $entitlement) {
-
-            $leaveType = $entitlement->leavetype->type_name; // Assuming there's a 'leave_type' column
-            $balance = $entitlement->ent_amount;     // Assuming 'balance' holds leave value
-            $id = $entitlement->id;
-
-
-            $leaveSummary[$leaveType] = $balance; // Dynamically add leave type and value
-        }
-
-        return $leaveSummary;
-    }
-
 
 
     /**

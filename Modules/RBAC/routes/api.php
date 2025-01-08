@@ -10,6 +10,7 @@ use Modules\RBAC\Http\Controllers\Api\RBAC\UserProfileController;
 use Modules\RBAC\Http\Controllers\Api\RBAC\RoleController;
 use Modules\RBAC\Http\Controllers\Api\RBAC\PermissionController;
 use Modules\RBAC\Http\Controllers\Api\Auth\PasswordResetController;
+use Modules\RBAC\Http\Controllers\Api\RBAC\DashboardController;
 /*
  *--------------------------------------------------------------------------
  * API Routes
@@ -37,7 +38,7 @@ Route::group(
         Route::post('/login-mobile', [LoginController::class, 'loginMobile'])->name('login-mobile.api');
         Route::post('/forgotPassword', [PasswordResetController::class, 'sendResetLinkEmail'])->name('forgotPass.api');
         Route::post('/resetPassword', [PasswordResetController::class, 'reset'])->name('password.reset');
-        
+
 
     }
 );
@@ -49,7 +50,7 @@ Route::group(
 		'namespace' => 'Api\RBAC'
     ],
     function(){
-        
+
         Route::post('/change-password', [ChangePasswordController::class, 'changePassword'])->name('change-password.api');
 
         Route::get('permissions',[PermissionController::class, 'index'])->name('api.permissions.index');
@@ -77,5 +78,10 @@ Route::group(
         Route::get('roles/{role}',[RoleController::class, 'show'])->name('api.roles.show');
         Route::put('roles/{role}',[RoleController::class, 'update'])->name('api.roles.update');
         Route::delete('roles/{id}',[RoleController::class, 'destroy'])->name('api.roles.destroy');
+
+        Route::get('get-employees',[DashboardController::class, 'getEmployees'])->name('api.dashboard.getEmployees');
+        Route::get('get-pending-leaves',[DashboardController::class, 'getPendingLeaves'])->name('api.dashboard.getPendingLeaves');
+        Route::get('get-subordinate-leaves',[DashboardController::class, 'getSubordinateLeaves'])->name('api.dashboard.getSubordinateLeaves');
+        Route::get('get-last-leave',[DashboardController::class, 'getLastLeave'])->name('api.dashboard.getLastLeave');
     }
 );

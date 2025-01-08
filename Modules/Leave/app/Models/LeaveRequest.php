@@ -27,6 +27,10 @@ class LeaveRequest extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    public function supervisedBy() {
+        return $this->belongsTo(User::class, 'supervised_by');
+    }
+
 	public function scopeOrdered($query, $value){
         return $query->orderBy('created_at', $value);
     }

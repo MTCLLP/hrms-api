@@ -102,6 +102,7 @@ class LeaveRequestController extends Controller
     }
 
     public function approveLeave(Request $request){
+
         $leaveId = $request->input('id');
         $leave = LeaveRequest::find($leaveId);
         $startDate = Carbon::parse($leave->start_date);
@@ -128,6 +129,7 @@ class LeaveRequestController extends Controller
         $leave = LeaveRequest::find($leaveId);
         $leave->status = 'Rejected';
         $leave->comments = $request->input('comment');
+        $leave->supervised_by = auth()->user()->id;
         $leave->save();
         return response()->json(['message' => 'Leave request rejected successfully.'], 200);
     }
@@ -145,18 +147,60 @@ class LeaveRequestController extends Controller
      */
     public function update(Request $request, LeaveRequest $leaveRequest)
     {
-        $leaveRequest->employee_id = $request->input('employee_id');
-        $leaveRequest->leave_type = $request->input('leave_type');
-        $leaveRequest->start_date = $request->input('start_date');
-        $leaveRequest->end_date = $request->input('end_date');
-        $leaveRequest->leave_type = $request->input('leave_type');
-        $leaveRequest->status = $request->input('status');
-        $leaveRequest->comments = $request->input('comments');
-        $leaveRequest->is_active = $request->input('is_active');
-        $leaveRequest->is_trashed = $request->input('is_trashed');
-        $leaveRequest->created_by = auth()->user()->id;
-        $leaveRequest->save();
 
+        $employeeId = auth()->user()->employee->id;
+
+        // Parse dates using Carbon
+        $startDate = Carbon::parse($request->start_date);
+        $endDate = Carbon::parse($request->end_date);
+
+        // Check for overlapping leave requests
+        $overlap = LeaveRequest::where('employee_id', $employeeId)
+            ->where('is_active', 1) // Only active leaves
+            ->where(function ($query) use ($startDate, $endDate) {
+                $query->whereBetween('start_date', [$startDate, $endDate])
+                    ->orWhereBetween('end_date', [$startDate, $endDate])
+                    ->orWhere(function ($query) use ($startDate, $endDate) {
+                        $query->where('start_date', '<=', $startDate)
+                                ->where('end_date', '>=', $endDate);
+                    });
+            })
+            ->exists();
+
+        if ($overlap) {
+            // return response()->json([
+            //     'status' => false,
+            //     'message' => 'Leave request overlaps with an existing request.',
+            //     'errors' => ['' => ['Invalid email or password']]
+            // ], 422);
+            return response()->json(['message' => 'Leave request overlaps with an existing request.'], 422);
+        }
+
+
+        // Calculate the number of days (inclusive)
+        $numberOfDays = (int)($startDate->diffInDays($endDate)) + 1;
+
+        $getLeaveEntitlement = (int)LeaveEntitlement::where('employee_id',$employeeId)->where('leaveType_id',$request->input('selectedLeaveType'))->pluck('ent_amount')->first();
+
+        $getLeaveBalance = (int)LeaveBalance::where('employee_id',$employeeId)->where('leavetype_id',$request->input('selectedLeaveType'))->pluck('balance_amount')->first();
+
+        if ($numberOfDays > $getLeaveEntitlement) {
+            return response()->json(['error' => 'Leave days exceed entitlement!'], 400);
+        } elseif ($numberOfDays > $getLeaveBalance) {
+            return response()->json(['error' => 'Insufficient leave balance!'], 400);
+        } else {
+
+            $leaveRequest->employee_id = $request->input('employee_id');
+            $leaveRequest->leavetype_id = $request->input('leavetype_id');
+            $leaveRequest->start_date = $request->input('start_date');
+            $leaveRequest->end_date = $request->input('end_date');
+            $leaveRequest->status = $request->input('status');
+            $leaveRequest->comments = $request->input('comments');
+            $leaveRequest->is_active = $request->input('is_active');
+            $leaveRequest->is_trashed = $request->input('is_trashed');
+            $leaveRequest->created_by = auth()->user()->id;
+            $leaveRequest->save();
+        }
         return new LeaveRequestResource($leaveRequest);
     }
 
@@ -213,8 +257,8 @@ class LeaveRequestController extends Controller
     /**
      * Remove multiple specified resources from storage.
      *
-     * This method is used to delete multiple companies from the database.
-     * If the company is already marked as trashed (`is_trashed` == 1), it will be permanently deleted.
+     * This method is used to delete multiple records from the database.
+     * If the record is already marked as trashed (`is_trashed` == 1), it will be permanently deleted.
      * Otherwise, it will be soft deleted by setting the `is_trashed` flag to 1 and updating the `deleted_at` timestamp.
      *
      *

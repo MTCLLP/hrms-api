@@ -58,6 +58,16 @@ class JobReportingController extends Controller
             return response()->json(['message' => 'Subordinate and Superior cannot be the same.'], 422);
         }
 
+        // 2. Check if the Subordinate already has the same Superior
+        $exists = JobReporting::where('superior_id', $request->input('superior'))
+            ->where('subordinate_id', $request->input('subordinateId'))
+            ->where('is_active', 1) // Only check active records
+            ->exists();
+
+        if ($exists) {
+            return response()->json(['message' => 'This subordinate already has the same superior.'], 422);
+        }
+
         $jobReporting = JobReporting::create([
             'superior_id' => $request->input('superior'),
             'subordinate_id' => $request->input('subordinateId'),//Current logged in user will be subordinate
@@ -77,9 +87,19 @@ class JobReportingController extends Controller
             return response()->json(['message' => 'Subordinate and Superior cannot be the same.'], 422);
         }
 
+        // 2. Check if the Subordinate already has the same Superior
+        $exists = JobReporting::where('subordinate_id', $request->input('superiorId'))
+            ->where('subordinate_id', $request->input('subordinateId'))
+            ->where('is_active', 1) // Only check active records
+            ->exists();
+
+        if ($exists) {
+            return response()->json(['message' => 'This subordinate already has the same superior.'], 422);
+        }
+
         $jobReporting = JobReporting::create([
             'superior_id' => $request->input('superiorId'),
-            'subordinate_id' => $request->input('subordinate'),
+            'subordinate_id' => $request->input('subordinateId'),
             'reporting_method_id' => $request->input('reporting_methods'),
             'created_by' => auth()->user()->id,
             'is_active' => 1,

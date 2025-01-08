@@ -24,6 +24,7 @@ class LeaveRequestResource extends JsonResource
             'comments' => $this->comments,
             'start_date' => $this->start_date,
             'end_date' => $this->end_date,
+            'supervised_by' => $this->supervisedBy,
             'created_by' => $this->createdBy,
             'is_active' => $this->is_active,
             'is_trashed' => $this->is_trashed,
