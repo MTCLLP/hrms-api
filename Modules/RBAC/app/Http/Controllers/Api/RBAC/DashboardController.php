@@ -48,8 +48,7 @@ class DashboardController extends Controller
     function getLastLeave()
     {
         $employee = auth()->user()->employee;
-        $lastLeave = $employee->leaveRequests()->latest();
-        dd($lastLeave);
+        $lastLeave = $employee->leaveRequests()->latest()->first();
         return response()->json($lastLeave);
     }
 

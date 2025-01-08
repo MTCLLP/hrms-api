@@ -5,36 +5,115 @@ namespace Modules\Leave\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Modules\Leave\Models\LeaveBalance;
+use Modules\Leave\Models\LeaveType;
 use Modules\Leave\Transformers\LeaveBalanceResource as LeaveBalanceResource;
 
 class LeaveBalanceController extends Controller
 {
+    /**
+     * Display a listing of the resource.
+     */
     public function index()
     {
         $user = auth()->user(); // Get the authenticated user
 
-        if ($user->hasRole('Administrator')) {
+        // Fetch all leave types for consistency
+        $leaveTypes = LeaveType::pluck('type_name', 'id'); // Assuming LeaveType model exists
 
-            $leaveBalances = LeaveBalance::with(['employee.user'])
+        // Result container
+        $result = [];
+
+        if ($user->hasRole('Administrator')) {
+            // Admin: fetch all leave balances
+            $leaveBalances = LeaveBalance::with(['employee.user', 'leavetype'])
                 ->where('is_active', 1)
-                ->get() // Retrieve all results (not paginated initially)
+                ->get()
                 ->groupBy('employee_id'); // Group by employee ID
+
+            foreach ($leaveBalances as $employeeId => $balances) {
+                $firstBalance = $balances->first(); // Use the first record to get employee details
+                $employee = $firstBalance->employee;
+
+                // Prepare entitlement summary for each leave type
+                $leaveSummary = $this->formatBalances($balances, $leaveTypes);
+
+                $result[] = [
+                    'employee' => [
+                        'id' => $employee->id,
+                        'name' => $employee->user->name, // Assuming 'name' exists in users table
+                    ],
+                    'leave_balances' => $leaveSummary,
+                ];
+            }
         } else {
-            // Employee: fetch leave balances for the specific employee
-            $employee = $user->employee; // Get the employee record associated with the user
+            // Employee: fetch entitlements for the logged-in employee
+            $employee = $user->employee;
 
             if (!$employee) {
                 abort(403, 'Employee record not found');
             }
 
-            $leaveBalances = LeaveBalance::where('employee_id', $employee->id)
+            $balances = LeaveBalance::with(['leavetype'])
+                ->where('employee_id', $employee->id)
                 ->where('is_active', 1)
-                ->paginate(10); // Paginate for employees
+                ->get();
+
+            // Prepare entitlement summary for each leave type
+            $leaveSummary = $this->formatBalances($balances, $leaveTypes);
+
+            $result[] = [
+                'employee' => [
+                    'id' => $employee->id,
+                    'name' => $user->name,
+                ],
+                'leave_balances' => $leaveSummary,
+            ];
         }
 
-        // If Admin, handle grouped results manually
-        $result = [];
+        // Return the final JSON result
+        return response()->json($result);
+    }
+
+    /**
+     * Format leave entitlements based on all leave types.
+     */
+    private function formatBalances($balances, $leaveTypes)
+    {
+        $leaveSummary = [];
+
+        // Initialize all leave types with 0
+        foreach ($leaveTypes as $typeName) {
+            $leaveSummary[$typeName] = 0; // Default value
+        }
+
+        // Populate actual values from entitlements
+        foreach ($balances as $balance) {
+            $leaveType = $balance->leaveType->type_name; // Assuming 'type_name' exists
+            $balance = $balance->balance_amount;            // Get entitlement amount
+
+            $leaveSummary[$leaveType] = $balance;           // Add or update the value
+        }
+
+        return $leaveSummary;
+    }
+
+    /**
+     * Display a paginated listing of the resource.
+     * @return Response
+     */
+    public function paginated()
+    {
+        $user = auth()->user(); // Get the authenticated user
+
         if ($user->hasRole('Administrator')) {
+            // Admin: fetch all leave balances with pagination
+            $leaveBalances = LeaveBalance::with(['employee.user'])
+                ->where('is_active', 1)
+                ->get() // Retrieve all results for grouping
+                ->groupBy('employee_id'); // Group by employee ID
+
+            // Prepare the result for all employees (no pagination for admin)
+            $result = [];
             foreach ($leaveBalances as $employeeId => $balances) {
                 $firstBalance = $balances->first(); // Get first balance for employee details
 
@@ -46,97 +125,31 @@ class LeaveBalanceController extends Controller
                 ], $leaveSummary);
             }
 
-            return response()->json($result); // Return grouped results
-        }
+            return response()->json($result); // Return grouped results for admin
+        } else {
+            // Employee: fetch leave balances for the specific employee with pagination
+            $employee = $user->employee; // Get the employee record associated with the user
 
-        // For employees, format and return directly paginated results
-        $result = [];
-        foreach ($leaveBalances as $balance) {
-            $result[] = array_merge([
-                'employee' => $balance->employee,
-            ], $this->formatBalances([$balance]));
-        }
+            if (!$employee) {
+                abort(403, 'Employee record not found');
+            }
 
-        return response()->json($result);
+            // Paginate the employee's leave balances
+            $leaveBalances = LeaveBalance::where('employee_id', $employee->id)
+                ->where('is_active', 1)
+                ->paginate(10);
+
+            // Format and return paginated results
+            $result = [];
+            foreach ($leaveBalances as $balance) {
+                $result[] = array_merge([
+                    'employee' => $balance->employee,
+                ], $this->formatBalances([$balance])); // Format each balance entry
+            }
+
+            return response()->json($result); // Return paginated results for employee
+        }
     }
-
-    /**
-     * Display a paginated listing of the resource.
-     * @return Response
-     */
-    public function paginated()
-{
-    $user = auth()->user(); // Get the authenticated user
-
-    if ($user->hasRole('Administrator')) {
-        // Admin: fetch all leave balances with pagination
-        $leaveBalances = LeaveBalance::with(['employee.user'])
-            ->where('is_active', 1)
-            ->get() // Retrieve all results for grouping
-            ->groupBy('employee_id'); // Group by employee ID
-
-        // Prepare the result for all employees (no pagination for admin)
-        $result = [];
-        foreach ($leaveBalances as $employeeId => $balances) {
-            $firstBalance = $balances->first(); // Get first balance for employee details
-
-            // Prepare balance types and values
-            $leaveSummary = $this->formatBalances($balances);
-
-            $result[] = array_merge([
-                'employee' => $firstBalance->employee, // Use the first record to get employee details
-            ], $leaveSummary);
-        }
-
-        return response()->json($result); // Return grouped results for admin
-    } else {
-        // Employee: fetch leave balances for the specific employee with pagination
-        $employee = $user->employee; // Get the employee record associated with the user
-
-        if (!$employee) {
-            abort(403, 'Employee record not found');
-        }
-
-        // Paginate the employee's leave balances
-        $leaveBalances = LeaveBalance::where('employee_id', $employee->id)
-            ->where('is_active', 1)
-            ->paginate(10);
-
-        // Format and return paginated results
-        $result = [];
-        foreach ($leaveBalances as $balance) {
-            $result[] = array_merge([
-                'employee' => $balance->employee,
-            ], $this->formatBalances([$balance])); // Format each balance entry
-        }
-
-        return response()->json($result); // Return paginated results for employee
-    }
-}
-
-/**
- * Format balances for output
- */
-private function formatBalances($balances)
-{
-    $leaveSummary = [];
-
-    foreach ($balances as $balance) {
-        // Keep balance as the object for later use
-        $leaveType = $balance->leavetype->type_name; // Get the leave type name
-        $balanceAmount = $balance->balance_amount;   // Store balance amount in a separate variable
-        $id = $balance->id;                          // Now this works because $balance is still an object
-
-        // Ensure the leave type key is unique and balances are properly stored
-        $leaveSummary[$leaveType] = [
-            'balance' => $balanceAmount,
-            'id' => $id
-        ];
-    }
-
-    return $leaveSummary;
-}
-
 
     /**
      * Store a newly created resource in storage.
