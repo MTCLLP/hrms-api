@@ -23,7 +23,11 @@ class EmployeeController extends Controller
     public function index()
     {
 
-        $employees = Employee::where('is_trashed',false)->orderBy('created_at','desc')->get();
+        $employees = Employee::where('is_trashed', false)
+            ->with('user') // Eager load the user relationship
+            ->get()
+            ->sortBy('user.name'); // Sort by the related user's name
+
 
 
         return EmployeeResource::collection($employees);
@@ -37,7 +41,13 @@ class EmployeeController extends Controller
     {
         // $employees = QueryBuilder::for(Employee::class)
         // ->allowedIncludes(['user'])->where('is_trashed',false)->orderBy('created_at','desc')->paginate(10);
-        $employees = Employee::where('is_trashed',false)->orderBy('created_at','desc')->paginate(10);
+        $employees = Employee::where('is_trashed', false)
+            ->whereHas('user') // Ensure user exists
+            ->with('user') // Eager load user to avoid N+1 queries
+            ->join('users', 'employees.user_id', '=', 'users.id') // Join users table
+            ->orderBy('users.name', 'asc') // Order by user's name
+            ->select('employees.*') // Select employees columns
+            ->paginate(10);
 
         return EmployeeResource::collection($employees);
     }

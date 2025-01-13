@@ -25,8 +25,8 @@ return new class extends Migration
             $table->string('comments');
             $table->bigInteger('created_by')->unsigned()->index()->nullable();
             $table->foreign('created_by')->references('id')->on('users')->onDelete('set null')->onUpdate('cascade');
-            $table->bigInteger('supervised')->unsigned()->index()->nullable();
-            $table->foreign('supervised')->references('id')->on('users')->onDelete('set null')->onUpdate('cascade');
+            $table->bigInteger('supervised_by')->unsigned()->index()->nullable();
+            $table->foreign('supervised_by')->references('id')->on('users')->onDelete('set null')->onUpdate('cascade');
             $table->timestamps();
         });
     }

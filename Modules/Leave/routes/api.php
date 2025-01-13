@@ -7,6 +7,7 @@ use Modules\Leave\Http\Controllers\LeaveEntitlementController;
 use Modules\Leave\Http\Controllers\LeaveRequestController;
 use Modules\Leave\Http\Controllers\LeaveSettingController;
 use Modules\Leave\Http\Controllers\LeaveTypeController;
+use Modules\Leave\Http\Controllers\HolidayController;
 
 /*
  *--------------------------------------------------------------------------
@@ -80,5 +81,16 @@ Route::group(
         Route::patch('/leave-type/{leaveType}', [LeaveTypeController::class, 'update'])->name('api.leave-type.update');
 		Route::delete('/leave-type/{id}', [LeaveTypeController::class, 'destroy'])->name('api.leave-type.destroy');
         Route::post('/leave-type-delete-multiple', [LeaveTypeController::class, 'destroyMultiple'])->name('api.leave-type.destroy-multiple');
+
+
+        Route::get('/holiday', [HolidayController::class, 'index'])->name('api.holiday.index');
+		Route::get('/holiday/paginated', [HolidayController::class, 'paginated'])->name('api.holiday.paginated');
+		Route::get('/holiday/trash', [HolidayController::class, 'trash'])->name('api.holiday.trash');
+		Route::get('/holiday/restore/{id}', [HolidayController::class, 'restore'])->name('api.holiday.restore');
+        Route::post('/holiday', [HolidayController::class, 'store'])->name('api.holiday.store');
+        Route::get('/holiday/{holiday}', [HolidayController::class, 'show'])->name('api.holiday.show');
+        Route::patch('/holiday/{holiday}', [HolidayController::class, 'update'])->name('api.holiday.update');
+		Route::delete('/holiday/{id}', [HolidayController::class, 'destroy'])->name('api.holiday.destroy');
+        Route::post('/holiday-delete-multiple', [HolidayController::class, 'destroyMultiple'])->name('api.holiday.destroy-multiple');
 	}
 );
