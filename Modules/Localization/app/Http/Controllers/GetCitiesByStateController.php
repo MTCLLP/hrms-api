@@ -6,7 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
 
-use Modules\Localization\Entities\State;
+use Modules\Localization\Models\State;
 
 use Modules\Localization\Transformers\GetCitiesByState as GetCitiesByStateResource;
 

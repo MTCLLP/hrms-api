@@ -1,43 +1,31 @@
 <?php
 
-namespace Modules\Localization\Models;
+namespace Modules\Localization\Transformers;
 
-use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\Resources\Json\JsonResource;
 
+use Carbon\Carbon;
 
-use Modules\RBAC\Models\User;
-
-use App\Scopes\CreatedByScope;
-
-class Language extends Model
+class Language extends JsonResource
 {
-
-
-    protected $fillable = [
-		'name',
-		'code',
-		'is_active',
-		'is_trashed',
-		'created_by'
-	];
-
-	public function createdBy() {
-        return $this->belongsTo(User::class, 'created_by');
+    /**
+     * Transform the resource into an array.
+     *
+     * @param  \Illuminate\Http\Request
+     * @return array
+     */
+    public function toArray($request)
+    {
+        return [
+            'id' => $this->id,
+            'name' => $this->name,
+            'code' => $this->code,
+            'is_active' => $this->is_active,
+            'is_trashed' => $this->is_trashed,
+            'created_at' => ($this->created_at ? Carbon::parse($this->created_at)->diffForHumans() : null),
+            'updated_at' => ($this->updated_at ? Carbon::parse($this->updated_at)->diffForHumans() : null),
+            'deleted_at' => ($this->deleted_at ? Carbon::parse($this->deleted_at)->diffForHumans() : null),
+            'created_by' => $this->createdBy,
+        ];
     }
-
-    public function cuisine(){
-        return $this->belongsToMany(Cuisine::class,'cuisine_language');
-    }
-
-    public function scopeOrdered($query, $value){
-        return $query->orderBy('created_at', $value);
-    }
-
-	public function scopeActive($query, $value){
-        return $query->where('is_active', $value);
-    }
-
-	public function scopeTrashed($query, $value){
-        return $query->where('is_trashed', $value);
-	}
 }

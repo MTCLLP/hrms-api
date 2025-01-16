@@ -83,5 +83,6 @@ Route::group(
         Route::get('get-pending-leaves',[DashboardController::class, 'getPendingLeaves'])->name('api.dashboard.getPendingLeaves');
         Route::get('get-subordinate-leaves',[DashboardController::class, 'getSubordinateLeaves'])->name('api.dashboard.getSubordinateLeaves');
         Route::get('get-last-leave',[DashboardController::class, 'getLastLeave'])->name('api.dashboard.getLastLeave');
+        Route::get('get-calendar-data',[DashboardController::class,'displayCalendar'])->name('api.dashboard.displayCalendar');
     }
 );

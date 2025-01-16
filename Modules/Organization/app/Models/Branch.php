@@ -7,9 +7,9 @@ use Modules\RBAC\Models\User;
 use App\Scopes\CreatedByScope;
 use Modules\Organization\Models\Department;
 use Modules\Project\Models\Enquiry;
-use Modules\System\Models\City;
-use Modules\System\Models\State;
-use Modules\System\Models\Country;
+use Modules\Localization\Models\City;
+use Modules\Localization\Models\State;
+use Modules\Localization\Models\Country;
 use Modules\Organization\Models\Employee;
 
 class Branch extends Model

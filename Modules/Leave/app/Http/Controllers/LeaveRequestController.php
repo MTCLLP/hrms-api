@@ -8,6 +8,7 @@ use Modules\Leave\Models\LeaveRequest;
 use Modules\Leave\Models\LeaveType;
 use Modules\Leave\Models\LeaveEntitlement;
 use Modules\Leave\Models\LeaveBalance;
+use Modules\Employee\Models\JobReporting;
 use Carbon\Carbon;
 use Modules\Leave\Transformers\LeaveRequestResource as LeaveRequestResource;
 
@@ -29,10 +30,38 @@ class LeaveRequestController extends Controller
      */
     public function paginated()
     {
-        $leaveRequests = LeaveRequest::paginate(10);
+        $user = auth()->user();
+
+        if ($user->hasRole('Administrator') or $user->hasRole('Superadmin')) {
+            $leaveRequests = LeaveRequest::where('is_trashed', false)
+                ->orderBy('created_at', 'desc')
+                ->paginate(10);
+        } elseif ($user->hasRole('Manager')) {
+            $managerEmployeeId = $user->employee->id;
+
+            $subordinateIds = JobReporting::where('superior_id', $managerEmployeeId)
+                ->where('is_active', true)
+                ->pluck('subordinate_id');
+
+            $leaveRequests = LeaveRequest::where('is_trashed', false)
+                ->whereIn('employee_id', $subordinateIds->push($managerEmployeeId)) // Add manager's own ID
+                ->orderBy('created_at', 'desc')
+                ->paginate(10);
+        } elseif ($user->hasRole('User')) {
+            $employeeId = $user->employee->id;
+
+            $leaveRequests = LeaveRequest::where('is_trashed', false)
+                ->where('employee_id', $employeeId)
+                ->orderBy('created_at', 'desc')
+                ->paginate(10);
+        } else {
+            $leaveRequests = LeaveRequest::whereRaw('0 = 1')->paginate(10); // Empty query
+        }
 
         return LeaveRequestResource::collection($leaveRequests);
     }
+
+
 
     /**
      * Store a newly created resource in storage.

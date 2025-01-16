@@ -1,12 +1,10 @@
 <?php
 
-namespace Modules\Organization\Transformers\Organization;
+namespace Modules\Organization\Transformers;
 
 use Illuminate\Http\Resources\Json\JsonResource;
 use Carbon\Carbon;
-use Modules\Localization\Transformers\CityDropDown as CityDropDownResource;
-use Modules\Localization\Transformers\StateDropDown as StateDropDownResource;
-use Modules\Localization\Transformers\CountryDropDown as CountryDropDownResource;
+
 
 class BranchResource extends JsonResource
 {
@@ -24,9 +22,9 @@ class BranchResource extends JsonResource
             'name' => $this->name,
             'address' => $this->address,
             'contact_no' => $this->contact_no,
-            'city' => new CityDropDownResource($this->city),
-            'state' => new StateDropDownResource($this->state),
-            'country' => new CountryDropDownResource($this->country),
+            'city' => $this->city,
+            'state' => $this->state,
+            'country' => $this->country,
             'created_by' => $this->createdBy,
             'is_active' => $this->is_active,
             'is_trashed' => $this->is_trashed,

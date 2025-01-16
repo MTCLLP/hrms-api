@@ -6,7 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
 
-use Modules\Localization\Models\Localization\Country;
+use Modules\Localization\Models\Country;
 
 use Modules\Localization\Http\Requests\Country\CreateCountryRequest;
 use Modules\Localization\Http\Requests\Country\UpdateCountryRequest;
@@ -21,10 +21,7 @@ class CountryController extends Controller
      */
     public function index()
     {
-        $countries = QueryBuilder::for(Country::class)
-                        ->allowedFilters('name')
-                        ->trashed(false)
-                        ->get();
+        $countries = Country::all();
         // $countries = Country::trashed(false)->get();
 
         return CountryResource::collection($countries);

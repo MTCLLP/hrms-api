@@ -4,9 +4,9 @@ namespace Modules\Localization\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-use Modules\RBAC\Entities\User;
-use Modules\HR\Entities\Organization\Branch;
-use Modules\Company\Entities\Company;
+use Modules\RBAC\Models\User;
+use Modules\HR\Models\Organization\Branch;
+use Modules\Company\Models\Company;
 
 use App\Scopes\CreatedByScope;
 

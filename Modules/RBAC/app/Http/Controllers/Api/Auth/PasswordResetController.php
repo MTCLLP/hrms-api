@@ -2,7 +2,7 @@
 
 namespace Modules\RBAC\Http\Controllers\Api\Auth;
 
-use Modules\RBAC\Entities\User;
+use Modules\RBAC\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
@@ -74,14 +74,12 @@ class PasswordResetController extends Controller
      */
     public function reset(Request $request)
     {
+
         $validator = Validator::make($request->all(), [
             'email' => 'required|email',
-            'otp' => 'required',
-            'password' => 'required|confirmed|min:8',
-
-
-            // Add more validation rules for other fields
+            'password' => 'required|min:8',
         ]);
+
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 400);
@@ -94,19 +92,19 @@ class PasswordResetController extends Controller
         }
 
         // Check if the entered OTP matches the one stored in the user model
-        if ($user->email_otp != $request->otp) {
-            return response()->json([
-                'status' => false,
-                'errors' => ['otp' => ['Invalid OTP']]
-            ], 401);
-        }
+        // if ($user->email_otp != $request->otp) {
+        //     return response()->json([
+        //         'status' => false,
+        //         'errors' => ['otp' => ['Invalid OTP']]
+        //     ], 401);
+        // }
 
         // Update the user's password
         $user->password = $request->password;
         $user->save();
 
         // Reset the OTP
-        $user->email_otp = null;
+        // $user->email_otp = null;
         $user->save();
 
         // // Send a password reset confirmation email

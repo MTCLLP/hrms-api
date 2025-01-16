@@ -1,6 +1,6 @@
 <?php
 
-namespace Modules\System\Transformers\Localization;
+namespace Modules\Localization\Transformers;
 
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -21,7 +21,7 @@ class CityDropDown extends JsonResource
         return [
             'id' => $this->id,
             'name' => $this->name,
-            
+
         ];
     }
 }

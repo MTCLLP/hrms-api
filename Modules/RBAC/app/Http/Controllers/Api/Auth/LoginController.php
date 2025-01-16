@@ -82,7 +82,8 @@ class LoginController extends Controller
             'mobile' => $user->mobile,
             'email_verified_at' => $user->email_verified_at,
             'mobile_verified_at' => $user->mobile_verified_at,
-            'role' => $user->roles,
+            //'roles' => $user->roles,
+            'roles' => $user->getRoleNames(),
             'permissions' => $user->roles->first()?->permissions->pluck('name'), // Safely access permissions
             'message' => 'User logged in successfully',
             'token' => $user->createToken("API TOKEN")->plainTextToken,

@@ -5,6 +5,7 @@ namespace Modules\RBAC\Transformers;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 use Carbon\Carbon;
+use Modules\Employee\Transformers\EmployeeResource;
 
 class User extends JsonResource
 {
@@ -25,6 +26,7 @@ class User extends JsonResource
             'mobile' => $this->mobile,
             'roles' => $this->roles,
             'permissions' => $this->permissions,
+            'employee' => $this->employee ? new EmployeeResource($this->employee) : null,
             'created_at'=>($this->created_at ? Carbon::parse($this->created_at)->diffForHumans() : null),
         ];
     }

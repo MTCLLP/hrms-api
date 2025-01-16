@@ -161,6 +161,7 @@ class LeaveEntitlementController extends Controller
      */
     public function store(Request $request)
     {
+        dd($request);
         $leaveEntitlements = LeaveEntitlement::create([
             'leaveType_id' => $request->input('leaveType_id'),
             'employee_id' => $request->input('employee_id'),
