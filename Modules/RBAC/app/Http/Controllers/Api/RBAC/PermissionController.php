@@ -123,4 +123,25 @@ class PermissionController extends Controller
 
         return response()->json(['success'=>'Permission deleted!']);
     }
+
+    public function assignPermission()
+    {
+        // Find the role by name and guard
+        $role = Role::where('name', 'Employee')->where('guard_name', 'api')->first();
+
+        // Check if the role exists
+        if (!$role) {
+            return response()->json(['error' => 'Role not found'], 404);
+        }
+
+        // Fetch the permissions by IDs and guard
+        $permissions = Permission::whereIn('id', [
+            104,106,107,108,109,110,111,112,113,114,115,116,117,118,118,120,121,122,123,124,125,126,140,144,148,150,151,152,153,154,161,169,173
+        ])->where('guard_name', 'api')->get();
+
+        // Sync permissions with the role
+        $role->syncPermissions($permissions);
+
+        return response()->json(['success' => 'Permissions assigned!']);
+    }
 }

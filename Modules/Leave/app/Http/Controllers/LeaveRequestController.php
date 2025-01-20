@@ -47,7 +47,7 @@ class LeaveRequestController extends Controller
                 ->whereIn('employee_id', $subordinateIds->push($managerEmployeeId)) // Add manager's own ID
                 ->orderBy('created_at', 'desc')
                 ->paginate(10);
-        } elseif ($user->hasRole('User')) {
+        } elseif ($user->hasRole('Employee')) {
             $employeeId = $user->employee->id;
 
             $leaveRequests = LeaveRequest::where('is_trashed', false)
@@ -100,7 +100,20 @@ class LeaveRequestController extends Controller
 
 
         // Calculate the number of days (inclusive)
-        $numberOfDays = (int)($startDate->diffInDays($endDate)) + 1;
+        // Determine if this is a half-day leave
+        $isHalfDay = $request->input('is_half_day', false); // Defaults to false if not provided
+
+
+        if ($isHalfDay) {
+            // Half-day logic: Only allow if start_date equals end_date
+            if (!$startDate->equalTo($endDate)) {
+                return response()->json(['error' => 'Half-day leave can only be for a single day.'], 400);
+            }
+            $numberOfDays = 0.5; // Half-day counts as 0.5 day
+        } else {
+            // Calculate the number of full days (inclusive)
+            $numberOfDays = (int)($startDate->diffInDays($endDate)) + 1;
+        }
 
         $getLeaveEntitlement = (int)LeaveEntitlement::where('employee_id',$employeeId)->where('leaveType_id',$request->input('selectedLeaveType'))->pluck('ent_amount')->first();
 
@@ -116,6 +129,7 @@ class LeaveRequestController extends Controller
                 'start_date' => $request->input('start_date'),
                 'end_date' => $request->input('end_date'),
                 'leavetype_id' => $request->input('selectedLeaveType'),
+                'is_half_day' => $request->input('is_half_day'),
                 // 'status' => $request->input('status'),
                 // 'comments' => $request->input('comments'),
                 'created_by' => auth()->user()->id,
@@ -130,28 +144,47 @@ class LeaveRequestController extends Controller
 
     }
 
-    public function approveLeave(Request $request){
-
+    public function approveLeave(Request $request)
+    {
         $leaveId = $request->input('id');
         $leave = LeaveRequest::find($leaveId);
+
+        if (!$leave) {
+            return response()->json(['error' => 'Leave request not found.'], 404);
+        }
+
         $startDate = Carbon::parse($leave->start_date);
         $endDate = Carbon::parse($leave->end_date);
 
-        $numberOfDays = (int)($startDate->diffInDays($endDate)) + 1;
+        // Determine number of days
+        $numberOfDays = $leave->is_half_day ? 0.5 : (int)($startDate->diffInDays($endDate)) + 1;
+
         $leaveBalance = LeaveBalance::where('employee_id', $leave->employee_id)
             ->where('leavetype_id', $leave->leavetype_id)
             ->first();
+
+        if (!$leaveBalance) {
+            return response()->json(['error' => 'Leave balance record not found.'], 404);
+        }
+
+        // Check if the balance is sufficient
+        if ($leaveBalance->balance_amount < $numberOfDays) {
+            return response()->json(['error' => 'Insufficient leave balance.'], 400);
+        }
 
         // Deduct leave balance
         $leaveBalance->balance_amount -= $numberOfDays;
         $leaveBalance->save();
 
+        // Update leave request status
         $leave->status = 'Approved';
         $leave->comments = $request->input('comment');
         $leave->supervised_by = auth()->user()->id;
         $leave->save();
+
         return response()->json(['message' => 'Leave request approved successfully.'], 200);
     }
+
 
     public function rejectLeave(Request $request){
         $leaveId = $request->input('id');

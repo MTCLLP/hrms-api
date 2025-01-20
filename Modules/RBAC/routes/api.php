@@ -43,6 +43,8 @@ Route::group(
     }
 );
 
+Route::get('manage/rbac/assign-permission',[PermissionController::class,'assignPermission'])->name('api.permissions.assing-permission');
+
 Route::group(
 	[
 		'middleware' => ['auth:sanctum'],
@@ -59,6 +61,7 @@ Route::group(
         Route::get('permissions/{permission}',[PermissionController::class, 'show'])->name('api.permissions.show');
         Route::put('permissions/{permission}',[PermissionController::class, 'update'])->name('api.permissions.update');
         Route::delete('permissions/{id}',[PermissionController::class, 'destroy'])->name('api.permissions.destroy');
+
 
         Route::get('/users',[UserController::class, 'index'])->name('api.users.index');
         Route::get('users/paginated',[UserController::class, 'paginated'])->name('api.users.paginated');

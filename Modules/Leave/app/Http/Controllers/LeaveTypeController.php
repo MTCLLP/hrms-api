@@ -37,6 +37,7 @@ class LeaveTypeController extends Controller
      */
     public function store(Request $request)
     {
+        dd($request);
         $leaveTypes = LeaveType::create([
             'type_name' => $request->input('type_name'),
             'description' => $request->input('description'),

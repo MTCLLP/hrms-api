@@ -56,6 +56,7 @@ class DashboardController extends Controller
         // Fetch the leave requests, ordered by created_at
         $leaveRequests = $leaveRequestsQuery
             ->orderBy('created_at', 'desc')
+            ->where('is_trashed','false')
             ->get()
             ->map(function ($request) {
                 $request->start_date_formatted = Carbon::parse($request->start_date)->format('d M y');

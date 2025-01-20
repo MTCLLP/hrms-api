@@ -19,6 +19,7 @@ return new class extends Migration
             $table->foreign('employee_id')->references('id')->on('employees')->onDelete('set null')->onUpdate('cascade');
             $table->date('start_date');
             $table->date('end_date');
+            $table->boolean('is_half_day')->default(0);
             $table->bigInteger('leavetype_id')->unsigned()->index()->nullable();
             $table->foreign('leavetype_id')->references('id')->on('leave_types')->onDelete('set null')->onUpdate('cascade');
             $table->string('status')->default('Pending');//Approved, Pending

@@ -21,6 +21,7 @@ class LeaveRequestResource extends JsonResource
             'leavetype_id' => $this->leavetype_id,
             'leavetype' => $this->leaveType,
             'status' => $this->status,
+            'is_half_day' => $this->is_half_day ? 'Yes' : 'No',
             'comments' => $this->comments,
             'start_date' => $this->start_date,
             'start_date_formatted' => ($this->start_date ? Carbon::parse($this->start_date)->format('d M Y') : null),

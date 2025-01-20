@@ -161,21 +161,43 @@ class LeaveEntitlementController extends Controller
      */
     public function store(Request $request)
     {
-        dd($request);
-        $leaveEntitlements = LeaveEntitlement::create([
-            'leaveType_id' => $request->input('leaveType_id'),
-            'employee_id' => $request->input('employee_id'),
-            'ent_amount' => $request->input('ent_amount'),
-            'ent_start_date' => $request->input('ent_start_date'),
-            'ent_end_date' => $request->input('ent_end_date'),
-            'created_by' => auth()->user()->id,
-            'is_active' => 1,
-            'is_trashed' => 0,
 
+        $request->validate([
+            'employee_id' => 'required|exists:employees,id',
+            'ent_start_date' => 'required|date',
+            'ent_end_date' => 'required|date|after_or_equal:ent_start_date',
+            'entitlements' => 'required|array',
+            'entitlements.*.leaveType_id' => 'required|exists:leave_types,id',
+            'entitlements.*.ent_amount' => 'required|integer|min:0',
         ]);
 
-        return new LeaveEntitlementResource($leaveEntitlements);
+        $entitlements = $request->input('entitlements');
+        // $createdBy = auth()->user()->id;
+
+        $insertData = array_map(function ($entitlement) use ($request) {
+            return [
+                'leaveType_id' => $entitlement['leaveType_id'],
+                'employee_id' => $request->input('employee_id'),
+                'ent_amount' => $entitlement['ent_amount'],
+                'ent_start_date' => $request->input('ent_start_date'),
+                'ent_end_date' => $request->input('ent_end_date'),
+                // 'created_by' => $createdBy,
+                'is_active' => 1,
+                'is_trashed' => 0,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+        }, $entitlements);
+
+        // Bulk insert into the database
+        LeaveEntitlement::insert($insertData);
+
+        return response()->json([
+            'message' => 'Leave entitlements created successfully',
+            'data' => $insertData,
+        ], 201);
     }
+
 
     /**
      * Show the specified resource.

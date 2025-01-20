@@ -156,25 +156,7 @@ class LoginController extends Controller
                 $user->authentications;//Log user activities
             // $user->assignRole('Manager');
             // $user->roles()->detach();
-            if($user->profile){
-                return response()->json([
-                    'status' => true,
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'mobile' => $user->mobile,
-                    //'isProfileSet' => true,
-                    'email_verified_at' => $user->email_verified_at,
-                    'mobile_verified_at' => $user->mobile_verified_at,
-                    //'first_login' => $user->first_login,
-                    //'profile_id' => $user->profile->profile_id,
-                    'role' => $user->roles,
-                    'permissions' => $user->roles[0]->permissions->pluck('name'),
-                    'message' => 'User Logged In Successfully',
-                    'token' => $user->createToken("API TOKEN")->plainTextToken
-                ],200);
-            }
-            else{
+
                 return response()->json([
                     'status' => true,
                     'id' => $user->id,
@@ -185,14 +167,14 @@ class LoginController extends Controller
                     //'first_login' => $user->first_login,
                     'email_verified_at' => $user->email_verified_at,
                     'mobile_verified_at' => $user->mobile_verified_at,
-                    'role' => $user->roles,
-                    'permissions' => $user->roles[0]->permissions->pluck('name'),
+                    'roles' => $user->getRoleNames(), // Get all role names
+                    'permissions' => $user->getAllPermissions()->pluck('name'), // Get all permissions
                     'message' => 'User Logged In Successfully',
-                    'token' => $user->createToken("API TOKEN")->plainTextToken
-                ],200);
-            }
-            }
+                    'token' => $user->createToken("API TOKEN")->plainTextToken,
+                ], 200);
 
+
+            }
 
         } catch (\Throwable $th) {
             return response()->json([

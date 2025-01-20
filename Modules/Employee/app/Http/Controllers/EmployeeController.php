@@ -143,9 +143,9 @@ class EmployeeController extends Controller
         $employee->termination_date = $request->input('termination_date');
         $employee->user_id = $request->input('user_id');
         $employee->jobtitle_id = $request->input('jobtitle_id');
-        $employee->profile_image = $request->input('profile_image');
+        // $employee->profile_image = $request->input('profile_image');
         $employee->dob = $request->input('dob');
-        $employee->gender = $request->input('gender');
+        // $employee->gender = $request->input('gender');
         $employee->is_active = $request->input('is_active');
         $employee->is_trashed = $request->input('is_trashed');
 

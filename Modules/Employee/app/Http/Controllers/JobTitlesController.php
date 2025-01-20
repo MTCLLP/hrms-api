@@ -41,8 +41,9 @@ class JobTitlesController extends Controller
      */
     public function store(Request $request)
     {
+
         $jobTitle = JobTitle::create([
-            'title_name' => $request->input('title_name'),
+            'name' => $request->input('title_name'),
             'is_active' => 1,
             'is_trashed' => 0,
 

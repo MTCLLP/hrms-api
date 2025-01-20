@@ -3,7 +3,7 @@
 namespace Modules\Leave\Http\Controllers;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Setting;
+use Illuminate\Http\Request;
 use Modules\Leave\Models\LeaveSetting;
 use Modules\Leave\Transformers\LeaveSettingResource as LeaveSettingResource;
 
@@ -37,8 +37,9 @@ class LeaveSettingController extends Controller
      */
     public function store(Request $request)
     {
+
         $leaveSettings = LeaveSetting::create([
-            'leaveType_id' => $request->input('leaveType_id'),
+            'leaveType_id' => $request->input('leavetype_id'),
             'accrual_method' => $request->input('accrual_method'),
             'accrual_rate' => $request->input('accrual_rate'),
             'maximum_accrual' => $request->input('maximum_accrual'),
