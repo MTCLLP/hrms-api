@@ -4,6 +4,11 @@ namespace Modules\Leave\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Modules\Leave\Mail\NewLeaveRequestNotification;
+use Modules\Leave\Mail\LeaveApprovalNotification;
+use Modules\Leave\Mail\LeaveRejectionNotification;
+use Illuminate\Support\Facades\Mail;
+
 use Modules\Leave\Models\LeaveRequest;
 use Modules\Leave\Models\LeaveType;
 use Modules\Leave\Models\LeaveEntitlement;
@@ -71,6 +76,7 @@ class LeaveRequestController extends Controller
     public function store(Request $request)
     {
         $employeeId = auth()->user()->employee->id;
+        $employee = auth()->user()->employee;
 
         // Parse dates using Carbon
         $startDate = Carbon::parse($request->start_date);
@@ -138,6 +144,19 @@ class LeaveRequestController extends Controller
 
             ]);
 
+            // Notify all superiors
+            $superiors = $employee->superiors; // Get the superiors collection from the relationship
+
+            foreach ($superiors as $superior) {
+                $superiorDetails = $superior->superiorDetails; // Fetch superior details using the relationship
+
+                if ($superiorDetails && $superiorDetails->user && $superiorDetails->user->email) {
+                    Mail::to($superiorDetails->user->email)
+                        ->send(new NewLeaveRequestNotification($leaveRequests, $employee));
+                }
+            }
+
+
             return new LeaveRequestResource($leaveRequests);
         }
 
@@ -182,6 +201,11 @@ class LeaveRequestController extends Controller
         $leave->supervised_by = auth()->user()->id;
         $leave->save();
 
+        // Send approval notification
+        $supervisor = auth()->user();
+        Mail::to($leave->employee->user->email)
+            ->send(new LeaveApprovalNotification($leave, $supervisor));
+
         return response()->json(['message' => 'Leave request approved successfully.'], 200);
     }
 
@@ -193,6 +217,12 @@ class LeaveRequestController extends Controller
         $leave->comments = $request->input('comment');
         $leave->supervised_by = auth()->user()->id;
         $leave->save();
+
+        // Send approval notification
+        $supervisor = auth()->user();
+        Mail::to($leave->employee->user->email)
+            ->send(new LeaveRejectionNotification($leave, $supervisor));
+
         return response()->json(['message' => 'Leave request rejected successfully.'], 200);
     }
 
