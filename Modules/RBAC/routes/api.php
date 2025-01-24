@@ -87,5 +87,8 @@ Route::group(
         Route::get('get-subordinate-leaves',[DashboardController::class, 'getSubordinateLeaves'])->name('api.dashboard.getSubordinateLeaves');
         Route::get('get-last-leave',[DashboardController::class, 'getLastLeave'])->name('api.dashboard.getLastLeave');
         Route::get('get-calendar-data',[DashboardController::class,'displayCalendar'])->name('api.dashboard.displayCalendar');
+        Route::get('get-upcoming-leaves',[DashboardController::class,'upcomingLeaves'])->name('api.dashboard.upcomingLeaves');
+        Route::get('get-upcoming-birthdays',[DashboardController::class,'upcomingBirthdays'])->name('api.dashboard.upcomingBirthdays');
+        Route::get('get-upcoming-holiday',[DashboardController::class,'getUpcomingHoliday'])->name('api.dashboard.getUpcomingHoliday');
     }
 );

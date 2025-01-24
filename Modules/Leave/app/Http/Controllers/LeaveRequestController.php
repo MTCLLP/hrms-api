@@ -82,6 +82,11 @@ class LeaveRequestController extends Controller
         $startDate = Carbon::parse($request->start_date);
         $endDate = Carbon::parse($request->end_date);
 
+         // Check if start_date or end_date falls on a weekend
+        if ($startDate->isWeekend() || $endDate->isWeekend()) {
+            return response()->json(['error' => 'Start date and end date cannot be a Saturday or Sunday.'], 400);
+        }
+
         // Check for overlapping leave requests
         $overlap = LeaveRequest::where('employee_id', $employeeId)
             ->where('is_active', 1) // Only active leaves
@@ -136,6 +141,7 @@ class LeaveRequestController extends Controller
                 'end_date' => $request->input('end_date'),
                 'leavetype_id' => $request->input('selectedLeaveType'),
                 'is_half_day' => $request->input('is_half_day'),
+                'leave_description' => $request->input('leave_description'),
                 // 'status' => $request->input('status'),
                 // 'comments' => $request->input('comments'),
                 'created_by' => auth()->user()->id,
@@ -288,6 +294,7 @@ class LeaveRequestController extends Controller
             $leaveRequest->end_date = $request->input('end_date');
             $leaveRequest->status = $request->input('status');
             $leaveRequest->comments = $request->input('comments');
+            $leaveRequest->leave_description = $request->input('leave_description');
             $leaveRequest->is_active = $request->input('is_active');
             $leaveRequest->is_trashed = $request->input('is_trashed');
             $leaveRequest->created_by = auth()->user()->id;
@@ -325,7 +332,7 @@ class LeaveRequestController extends Controller
      */
     public function trash()
     {
-        $leaveRequests = LeaveRequest::where('is_trashed',false)->get();
+        $leaveRequests = LeaveRequest::where('is_trashed',true)->get();
 
         return LeaveRequestResource::collection($leaveRequests);
     }

@@ -122,7 +122,49 @@ class DashboardController extends Controller
     }
 
 
+    public function upcomingLeaves()
+    {
+        $leaves = LeaveRequest::with('employee.user')
+            ->where('status', 'Approved')
+            ->where('start_date', '>=', Carbon::now())
+            ->where('start_date', '<=', Carbon::now()->addDays(15))
+            ->get();
 
+        return response()->json($leaves);
+    }
 
+    public function upcomingBirthdays()
+    {
+        $today = Carbon::today();
+
+        $birthdays = Employee::with('user') // Eager load the related user (name)
+            ->select('id', 'user_id', 'dob') // Only fetch necessary fields
+            ->whereNotNull('dob') // Ensure dob is not null
+            ->orderByRaw(
+                "CASE
+                    WHEN MONTH(dob) = ? AND DAY(dob) >= ? THEN 0
+                    WHEN MONTH(dob) > ? THEN 0
+                    ELSE 1
+                END,
+                MONTH(dob),
+                DAY(dob)",
+                [$today->month, $today->day, $today->month]
+            )
+        ->get();
+
+        return response()->json($birthdays);
+    }
+
+    public function getUpcomingHoliday()
+    {
+        $today = Carbon::today();
+
+        $holiday = Holiday::where('date', '>=', $today)
+            ->where('date', '<=', $today->copy()->addDays(15))
+            ->orderBy('date', 'asc')
+            ->first();
+
+        return response()->json($holiday);
+    }
 
 }

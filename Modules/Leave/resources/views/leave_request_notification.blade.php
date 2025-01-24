@@ -17,7 +17,7 @@
         <li><strong>Is Half Day:</strong> {{ $leaveRequest->is_half_day ? 'Yes' : 'No' }}</li>
     </ul>
 
-    <p>Please log in to the system to review and take necessary action.</p>
+    <p>Please <a href="https://hub.mooltatvam.in/#/leave-requests">login</a> to the system to review and take necessary action.</p>
 
     <p>Thank you!</p>
 </body>

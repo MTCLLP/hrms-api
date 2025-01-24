@@ -10,7 +10,7 @@ use App\Scopes\CreatedByScope;
 
 class LeaveRequest extends Model
 {
-    protected $fillable = ["employee_id","start_date","end_date","leavetype_id","is_half_day","status","comments","is_active", "is_trashed", "created_by"];
+    protected $fillable = ["employee_id","start_date","end_date","leavetype_id","is_half_day","leave_description","status","comments","is_active", "is_trashed", "created_by"];
 
 
     public function employee()
