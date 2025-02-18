@@ -38,6 +38,7 @@ Route::group(
         Route::post('/login-mobile', [LoginController::class, 'loginMobile'])->name('login-mobile.api');
         Route::post('/forgotPassword', [PasswordResetController::class, 'sendResetLinkEmail'])->name('forgotPass.api');
         Route::post('/resetPassword', [PasswordResetController::class, 'reset'])->name('password.reset');
+        Route::post('/api-login', [LoginController::class, 'apiLogin'])->name('apiLogin.api');
 
 
     }

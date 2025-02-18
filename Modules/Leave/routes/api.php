@@ -7,6 +7,7 @@ use Modules\Leave\Http\Controllers\LeaveEntitlementController;
 use Modules\Leave\Http\Controllers\LeaveRequestController;
 use Modules\Leave\Http\Controllers\LeaveSettingController;
 use Modules\Leave\Http\Controllers\LeaveTypeController;
+use Modules\Leave\Http\Controllers\LeaveApprovalController;
 use Modules\Leave\Http\Controllers\HolidayController;
 
 /*
@@ -61,6 +62,7 @@ Route::group(
         Route::post('/leave-request-delete-multiple', [LeaveRequestController::class,'destroyMultiple'])->name('api.leave-request.destroy-multiple');
         Route::post('/leave-request/approve-leave', [LeaveRequestController::class, 'approveLeave'])->name('api.leave-request.approve-leave');
         Route::post('/leave-request/reject-leave', [LeaveRequestController::class, 'rejectLeave'])->name('api.leave-request.reject-leave');
+        Route::post('/leave-request/partial-approve-leave', [LeaveRequestController::class, 'partialApproval'])->name('api.leave-request.partial-approve-leave');
 
         Route::get('/leave-setting', [LeaveSettingController::class,'index'])->name('api.leave-setting.index');
 		Route::get('/leave-setting/paginated', [LeaveSettingController::class,'paginated'])->name('api.leave-setting.paginated');
@@ -81,6 +83,16 @@ Route::group(
         Route::patch('/leave-type/{leaveType}', [LeaveTypeController::class, 'update'])->name('api.leave-type.update');
 		Route::delete('/leave-type/{id}', [LeaveTypeController::class, 'destroy'])->name('api.leave-type.destroy');
         Route::post('/leave-type-delete-multiple', [LeaveTypeController::class, 'destroyMultiple'])->name('api.leave-type.destroy-multiple');
+
+        Route::get('/leave-approval', [LeaveApprovalController::class, 'index'])->name('api.leave-approval.index');
+		Route::get('/leave-approval/paginated', [LeaveApprovalController::class, 'paginated'])->name('api.leave-approval.paginated');
+		Route::get('/leave-approval/trash', [LeaveApprovalController::class, 'trash'])->name('api.leave-approval.trash');
+		Route::get('/leave-approval/restore/{id}', [LeaveApprovalController::class, 'restore'])->name('api.leave-approval.restore');
+        Route::post('/leave-approval', [LeaveApprovalController::class, 'store'])->name('api.leave-approval.store');
+        Route::get('/leave-approval/{leaveApproval}', [LeaveApprovalController::class, 'show'])->name('api.leave-approval.show');
+        Route::patch('/leave-approval/{leaveApproval}', [LeaveApprovalController::class, 'update'])->name('api.leave-approval.update');
+		Route::delete('/leave-approval/{id}', [LeaveApprovalController::class, 'destroy'])->name('api.leave-approval.destroy');
+        Route::post('/leave-approval-delete-multiple', [LeaveApprovalController::class, 'destroyMultiple'])->name('api.leave-approval.destroy-multiple');
 
 
         Route::get('/holiday', [HolidayController::class, 'index'])->name('api.holiday.index');

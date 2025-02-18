@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 use Modules\RBAC\Models\User;
 use Modules\Employee\Models\Employee;
 use Modules\Leave\Models\LeaveType;
+use Modules\Leave\Models\LeaveBalance;
+use Modules\Leave\Models\LeaveApproval;
 use App\Scopes\CreatedByScope;
 
 class LeaveRequest extends Model
@@ -22,6 +24,18 @@ class LeaveRequest extends Model
     {
         return $this->belongsTo(LeaveType::class, 'leavetype_id', 'id');
     }
+
+    public function leaveBalance()
+    {
+        return $this->hasMany(LeaveBalance::class, 'employee_id', 'employee_id')
+                    ->whereColumn('leavetype_id', 'leavetype_id');
+    }
+
+    public function leaveApprovals()
+    {
+        return $this->hasMany(LeaveApproval::class, 'leaverequest_id', 'id');
+    }
+
 
     public function createdBy() {
         return $this->belongsTo(User::class, 'created_by');
