@@ -5,11 +5,16 @@ namespace Modules\Leave\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Auth;
 use Spatie\QueryBuilder\QueryBuilder;
 use Spatie\QueryBuilder\AllowedFilter;
 
+
 use Modules\Leave\Models\LeaveApproval;
 use Modules\Leave\Transformers\LeaveApprovalResource as LeaveApprovalResource;
+use Modules\RBAC\Transformers\User as UserResource;
+
+
 
 class LeaveApprovalController extends Controller
 {
@@ -18,7 +23,6 @@ class LeaveApprovalController extends Controller
      */
     public function index(Request $request)
     {
-
         // Determine query parameters
         $isTrashed = $request->boolean('trashed', false); // Defaults to false
         $isPaginated = $request->boolean('paginate', false); // Defaults to false
@@ -26,8 +30,8 @@ class LeaveApprovalController extends Controller
 
 
         // Build the query
-        $query = QueryBuilder::for(LeaveApproval::class)->where('leaverequest_id',$request->id)
-            ->allowedFilters(['start_date','end_date','isPaidLeave']);
+        $query = QueryBuilder::for(LeaveApproval::class)->where('leaverequest_id', $request->id)
+            ->allowedFilters(['start_date', 'end_date', 'isPaidLeave']);
 
         // Fetch data based on pagination preference
         $leaveApprovals = $isPaginated
@@ -51,7 +55,7 @@ class LeaveApprovalController extends Controller
             'end_date' => $request->input('end_date'),
             'remarks' => $request->input('remarks'),
             'total_days' => $request->input('total_days'),
-            'approver_id' => auth()->user()->employee->id,
+            'approver_id' => Auth::user()->employee->id,
             'status' => $request->input('status'),
             'isPaidLeave' => $request->input('isPaidLeave'),
             'is_active' => 1,
@@ -97,20 +101,19 @@ class LeaveApprovalController extends Controller
     {
         $leaveApproval = LeaveApproval::findOrFail($id);
 
-		$is_trashed = $leaveApproval->is_trashed;
+        $is_trashed = $leaveApproval->is_trashed;
 
-		if($is_trashed == 1) {
-			$leaveApproval->delete(); // delete country
-		}
-		else{
+        if ($is_trashed == 1) {
+            $leaveApproval->delete(); // delete country
+        } else {
             $leaveApproval->is_trashed = '1';
             $leaveApproval->deleted_at = \Carbon\Carbon::now();
             $leaveApproval->save();
         }
 
-		return response()->json([
-			"message" => "LeaveApproval deleted"
-		], 202);
+        return response()->json([
+            "message" => "LeaveApproval deleted"
+        ], 202);
     }
 
     /**
@@ -119,7 +122,7 @@ class LeaveApprovalController extends Controller
      */
     public function trash()
     {
-        $leaveApprovals = LeaveApproval::where('is_trashed',false)->get();
+        $leaveApprovals = LeaveApproval::where('is_trashed', false)->get();
 
         return LeaveApprovalResource::collection($leaveApprovals);
     }
@@ -135,9 +138,9 @@ class LeaveApprovalController extends Controller
         $leaveApproval->deleted_at = null;
         $leaveApproval->save();
 
-		return response()->json([
-			"message" => "Approval restored successfully"
-		], 202);
+        return response()->json([
+            "message" => "Approval restored successfully"
+        ], 202);
     }
 
     /**

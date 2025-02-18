@@ -8,6 +8,8 @@ use Modules\Leave\Models\LeaveBalance;
 use Modules\Leave\Models\LeaveType;
 use Modules\Leave\Transformers\LeaveBalanceResource as LeaveBalanceResource;
 
+use Illuminate\Support\Facades\Auth;
+
 class LeaveBalanceController extends Controller
 {
     /**
@@ -15,7 +17,7 @@ class LeaveBalanceController extends Controller
      */
     public function index()
     {
-        $user = auth()->user(); // Get the authenticated user
+        $user = Auth::user(); // Get the authenticated user
 
         // Fetch all leave types for consistency
         $leaveTypes = LeaveType::pluck('type_name', 'id'); // Assuming LeaveType model exists
@@ -202,20 +204,19 @@ class LeaveBalanceController extends Controller
     {
         $leaveBalance = LeaveBalance::findOrFail($id);
 
-		$is_trashed = $leaveBalance->is_trashed;
+        $is_trashed = $leaveBalance->is_trashed;
 
-		if($is_trashed == 1) {
-			$leaveBalance->delete(); // delete country
-		}
-		else{
+        if ($is_trashed == 1) {
+            $leaveBalance->delete(); // delete country
+        } else {
             $leaveBalance->is_trashed = '1';
             $leaveBalance->deleted_at = \Carbon\Carbon::now();
             $leaveBalance->save();
         }
 
-		return response()->json([
-			"message" => "Leave Balance deleted"
-		], 202);
+        return response()->json([
+            "message" => "Leave Balance deleted"
+        ], 202);
     }
 
     /**
@@ -224,7 +225,7 @@ class LeaveBalanceController extends Controller
      */
     public function trash()
     {
-        $leaveBalances = LeaveBalance::where('is_trashed',false)->get();
+        $leaveBalances = LeaveBalance::where('is_trashed', false)->get();
 
         return LeaveBalanceResource::collection($leaveBalances);
     }
@@ -240,9 +241,9 @@ class LeaveBalanceController extends Controller
         $leaveBalance->deleted_at = null;
         $leaveBalance->save();
 
-		return response()->json([
-			"message" => "Leave Balance restored successfully"
-		], 202);
+        return response()->json([
+            "message" => "Leave Balance restored successfully"
+        ], 202);
     }
 
     /**
