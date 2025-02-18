@@ -146,12 +146,18 @@ class LeaveRequestController extends Controller
 
          // Check if start_date or end_date falls on a weekend
         if ($startDate->isWeekend() || $endDate->isWeekend()) {
-            return response()->json(['error' => 'Start date and end date cannot be a Saturday or Sunday.'], 400);
+            return response()->json([
+                'status' => false,
+                'message' => 'Leave cannot start on a weekend',
+                'errors' => ['Error' => ['Start date and end date cannot be a Saturday or Sunday.']]
+            ], 400);
+
         }
 
         // Check for overlapping leave requests
         $overlap = LeaveRequest::where('employee_id', $employeeId)
             ->where('is_active', 1) // Only active leaves
+            ->whereNot('status', 'Rejected')
             ->where(function ($query) use ($startDate, $endDate) {
                 $query->whereBetween('start_date', [$startDate, $endDate])
                     ->orWhereBetween('end_date', [$startDate, $endDate])
@@ -163,7 +169,11 @@ class LeaveRequestController extends Controller
             ->exists();
 
         if ($overlap) {
-            return response()->json(['message' => 'Leave request overlaps with an existing request.'], 422);
+            return response()->json([
+                'status' => false,
+                'message' => 'Leave overlaps',
+                'errors' => ['Error' => ['Leave request overlaps with an existing request.']]
+            ], 422);
         }
 
 
@@ -173,7 +183,11 @@ class LeaveRequestController extends Controller
 
         if ($isHalfDay) {
             if (!$startDate->equalTo($endDate)) {
-                return response()->json(['error' => 'Half-day leave can only be for a single day.'], 400);
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Half day can only be for a single day',
+                    'errors' => ['Error' => ['Half day can only be for a single day.']]
+                ], 400);
             }
             $numberOfDays = 0.5;
         } else {
@@ -185,12 +199,24 @@ class LeaveRequestController extends Controller
         $getLeaveBalance = (int)LeaveBalance::where('employee_id',$employeeId)->where('leavetype_id',$request->input('selectedLeaveType'))->pluck('balance_amount')->first();
 
         if($numberOfDays > 5){
-            return response()->json(['error' => 'You can only take 5 days of leave at once!'], 400);
+            return response()->json([
+                'status' => false,
+                'message' => 'Too many leaves',
+                'errors' => ['Error' => ['You can only take 5 days of leave at once!.']]
+            ], 400);
         }
         elseif ($numberOfDays > $getLeaveEntitlement) {
-            return response()->json(['error' => 'Leave days exceed entitlement!'], 400);
+            return response()->json([
+                'status' => false,
+                'message' => 'Leave days exceed entitlement',
+                'errors' => ['Error' => ['Leave days exceed entitlement!.']]
+            ], 400);
         } elseif ($numberOfDays > $getLeaveBalance) {
-            return response()->json(['error' => 'Insufficient leave balance!'], 400);
+            return response()->json([
+                'status' => false,
+                'message' => 'Insufficient leave balance',
+                'errors' => ['Error' => ['Insufficient leave balance.']]
+            ], 403);
         } else {
             $leaveRequests = LeaveRequest::create([
                 'employee_id' => $employeeId,
@@ -234,7 +260,11 @@ class LeaveRequestController extends Controller
         $leave = LeaveRequest::find($leaveId);
 
         if (!$leave) {
-            return response()->json(['error' => 'Leave request not found.'], 404);
+            return response()->json([
+                'status' => false,
+                'message' => 'Leave not found',
+                'errors' => ['Error' => ['Leave request not found.']]
+            ], 404);
         }
 
         $approver = auth()->user();
@@ -242,6 +272,7 @@ class LeaveRequestController extends Controller
         $endDate = Carbon::parse($leave->end_date);
         $numberOfDays = $leave->is_half_day ? 0.5 : ($startDate->diffInDays($endDate)) + 1;
 
+        // Determine if the leave is paid or unpaid
         $isPaidLeave = ($action !== 'approveWithoutPay');
 
         if ($isPaidLeave) {
@@ -294,7 +325,11 @@ class LeaveRequestController extends Controller
 
             // If leave balance is still insufficient
             if ($remainingDays > 0) {
-                return response()->json(['error' => 'Insufficient leave balance.'], 400);
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Insufficient balance',
+                    'errors' => ['Error' => ['Insufficient leave balance.']]
+                ], 400);
             }
 
             // Log deducted leave details (optional)
@@ -302,8 +337,24 @@ class LeaveRequestController extends Controller
         }
 
         // Set leave status based on approval type
-        $leave->status = ($action === 'approveWithoutPay') ? 'ApprovedWithoutPay' :
-                        (($action === 'conditionalApprove') ? 'PartialApproved' : 'Approved');
+        switch ($action) {
+            case 'approveWithoutPay':
+                $leave->status = 'ApprovedWithoutPay';
+                break;
+            case 'conditionalApprove':
+                $leave->status = 'ConditionalApprove';
+                break;
+            case 'partialApprove':
+                $leave->status = 'PartialApprove';
+                break;
+            case 'approve':
+                $leave->status = 'Approved';
+                break;
+            default:
+                // Handle default case if necessary
+                break;
+        }
+
         $leave->supervised_by = auth()->user()->id;
         $leave->save();
 
@@ -328,13 +379,18 @@ class LeaveRequestController extends Controller
 
 
 
+
     public function rejectLeave(Request $request)
     {
         $leaveId = $request->input('leave_request_id');
         $leave = LeaveRequest::find($leaveId);
 
         if (!$leave) {
-            return response()->json(['error' => 'Leave request not found.'], 404);
+            return response()->json([
+                'status' => false,
+                'message' => 'Leave not found',
+                'errors' => ['Error' => ['Leave request not found.']]
+            ], 404);
         }
 
         $approver = auth()->user();
@@ -421,14 +477,23 @@ class LeaveRequestController extends Controller
         $leave = LeaveRequest::find($leaveId);
 
         if (!$leave) {
-            return response()->json(['error' => 'Leave request not found.'], 404);
+            return response()->json([
+                'status' => false,
+                'message' => 'Leave not found',
+                'errors' => ['Error' => ['Leave request not found.']]
+            ], 404);
         }
 
         $approver = auth()->user();
         $partialApprovals = $request->input('partial_approvals', []);
 
         if (empty($partialApprovals)) {
-            return response()->json(['error' => 'No partial approval data provided.'], 400);
+            return response()->json([
+                'status' => false,
+                'message' => 'Data not provided',
+                'errors' => ['Error' => ['No partial approval data provided.']]
+            ], 400);
+
         }
 
         foreach ($partialApprovals as $approval) {
@@ -490,7 +555,12 @@ class LeaveRequestController extends Controller
 
                 // If leave balance is still insufficient, reject this approval
                 if ($remainingDays > 0) {
-                    return response()->json(['error' => 'Insufficient leave balance for partial approval.'], 400);
+                    return response()->json([
+                        'status' => false,
+                        'message' => 'Insufficient leave balance',
+                        'errors' => ['Error' => ['Insufficient leave balance for partial approval.']]
+                    ], 400);
+
                 }
 
                 // Log deducted leave details (optional)

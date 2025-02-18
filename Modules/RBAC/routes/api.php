@@ -82,7 +82,17 @@ Route::group(
         Route::get('roles/{role}',[RoleController::class, 'show'])->name('api.roles.show');
         Route::put('roles/{role}',[RoleController::class, 'update'])->name('api.roles.update');
         Route::delete('roles/{id}',[RoleController::class, 'destroy'])->name('api.roles.destroy');
+    }
+);
 
+
+Route::group(
+	[
+		'middleware' => ['auth:sanctum'],
+		'prefix' => 'manage/dashboard',
+		'namespace' => 'Api\RBAC'
+    ],
+    function(){
         Route::get('get-employees',[DashboardController::class, 'getEmployees'])->name('api.dashboard.getEmployees');
         Route::get('get-pending-leaves',[DashboardController::class, 'getPendingLeaves'])->name('api.dashboard.getPendingLeaves');
         Route::get('get-subordinate-leaves',[DashboardController::class, 'getSubordinateLeaves'])->name('api.dashboard.getSubordinateLeaves');
