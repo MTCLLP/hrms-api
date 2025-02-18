@@ -7,6 +7,8 @@ use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
 
 use Carbon\Carbon;
+use Spatie\QueryBuilder\QueryBuilder;
+use Spatie\QueryBuilder\AllowedFilter;
 use Modules\RBAC\Models\User;
 use Modules\Employee\Models\Employee;
 use Modules\Leave\Models\LeaveRequest;
@@ -32,31 +34,21 @@ class DashboardController extends Controller
 
     public function getSubordinateLeaves(Request $request)
     {
-        // Get the logged-in employee
         $employee = auth()->user()->employee;
 
-        // Get subordinate IDs
         $subordinateIds = $employee->subordinates->pluck('subordinate_id')->flatten();
 
-        // Get leave request statuses from the request query, default to empty array (no filter)
-        $statuses = $request->query('statuses', []);
-        if (!is_array($statuses)) {
-            $statuses = explode(',', $statuses); // Ensure it's always an array
-        }
-
-        // Start the query for leave requests
-        $leaveRequestsQuery = LeaveRequest::with('employee.user')
-            ->whereIn('employee_id', $subordinateIds);
-
-        // If statuses are provided, filter by status
-        if (!empty($statuses)) {
-            $leaveRequestsQuery->whereIn('status', $statuses);
-        }
-
-        // Fetch the leave requests, ordered by created_at
-        $leaveRequests = $leaveRequestsQuery
-            ->orderBy('created_at', 'desc')
-            ->where('is_trashed','false')
+        $leaveRequests = QueryBuilder::for(LeaveRequest::class)
+            ->whereIn('employee_id', $subordinateIds)
+            ->where('is_trashed', false)
+            ->allowedFilters([
+                AllowedFilter::exact('status'),
+                AllowedFilter::scope('start_date'),
+                AllowedFilter::scope('end_date'),
+            ])
+            ->allowedSorts(['name', 'start_date', 'end_date', 'created_at']) // Allow sorting by these fields
+            ->defaultSort('-created_at') // Default sorting by latest first
+            ->with('employee.user') // Eager loading relationships
             ->get()
             ->map(function ($request) {
                 $request->start_date_formatted = Carbon::parse($request->start_date)->format('d M y');
@@ -64,9 +56,10 @@ class DashboardController extends Controller
                 return $request;
             });
 
-        // Return the response
+        // Return response
         return response()->json($leaveRequests);
     }
+
 
 
 

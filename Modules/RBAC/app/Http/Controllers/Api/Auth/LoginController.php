@@ -183,4 +183,40 @@ class LoginController extends Controller
             ], 500);
         }
     }
+
+    public function apiLogin(Request $request)
+    {
+
+        $request->validate([
+            'mobile' => 'required|digits:10',
+        ]);
+
+        $mobileNumber = $request->input('mobile');
+
+        $user = User::where('mobile', $mobileNumber)->first();
+
+        if (!$user) {
+            return response()->json(['error' => 'User not found'], 404);
+        }
+
+        Auth::login($user);
+
+        $token = $user->createToken('API TOKEN')->plainTextToken;
+
+        return response()->json([
+            'status' => true,
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'mobile' => $user->mobile,
+            //'isProfileSet' => false,
+            //'first_login' => $user->first_login,
+            'email_verified_at' => $user->email_verified_at,
+            'mobile_verified_at' => $user->mobile_verified_at,
+            'roles' => $user->getRoleNames(), // Get all role names
+            'permissions' => $user->getAllPermissions()->pluck('name'), // Get all permissions
+            'message' => 'User Logged In Successfully',
+            'token' => $user->createToken("API TOKEN")->plainTextToken,
+        ], 200);
+    }
 }
