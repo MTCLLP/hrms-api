@@ -8,6 +8,8 @@ use Carbon\Carbon;
 use Spatie\QueryBuilder\QueryBuilder;
 use Spatie\QueryBuilder\AllowedFilter;
 
+use Modules\Leave\Models\LeaveRequest;
+use Modules\Leave\Models\LeaveBalance;
 use Modules\Leave\Models\LeaveApproval;
 use Modules\Leave\Transformers\LeaveApprovalResource as LeaveApprovalResource;
 
@@ -75,6 +77,11 @@ class LeaveApprovalController extends Controller
      */
     public function update(Request $request, LeaveApproval $leaveApproval)
     {
+        // Retrieve the old status before updating
+        $oldStatus = $leaveApproval->status;
+        $oldTotalDays = $leaveApproval->total_days;
+
+        // Get the new data
         $data = $request->only([
             'leaverequest_id',
             'start_date',
@@ -85,10 +92,55 @@ class LeaveApprovalController extends Controller
             'isPaidLeave',
         ]);
 
+        // Update the LeaveApproval record
         $leaveApproval->update($data);
+
+        // Fetch the related LeaveRequest
+        $leaveRequest = LeaveRequest::find($leaveApproval->leaverequest_id);
+
+        if (!$leaveRequest) {
+            return response()->json(['error' => 'Leave Request not found'], 404);
+        }
+
+        // Get the employee and leave type
+        $employeeId = $leaveRequest->employee_id;
+        $leaveTypeId = $leaveRequest->leavetype_id;
+
+        // Fetch the leave balance record
+        $leaveBalance = LeaveBalance::where('employee_id', $employeeId)
+            ->where('leavetype_id', $leaveTypeId)
+            ->first();
+
+        if (!$leaveBalance) {
+            return response()->json(['error' => 'Leave Balance not found'], 404);
+        }
+
+        // Adjustment Logic
+        if (
+            in_array($oldStatus, ['Rejected', 'ApprovedWithoutPay']) &&
+            in_array($data['status'], ['Approved', 'ConditionalApproved'])
+        ) {
+            // Deduct total_days from leave balance
+            $leaveBalance->balance_amount -= $data['total_days'];
+        } elseif (
+            in_array($oldStatus, ['Approved', 'ConditionalApproved']) &&
+            in_array($data['status'], ['Rejected', 'ApprovedWithoutPay'])
+        ) {
+            // Restore total_days to leave balance
+            $leaveBalance->balance_amount += $oldTotalDays;
+        }
+
+        // Ensure balance doesn't go negative
+        if ($leaveBalance->balance_amount < 0) {
+            return response()->json(['error' => 'Insufficient leave balance'], 400);
+        }
+
+        // Save the updated balance
+        $leaveBalance->save();
 
         return new LeaveApprovalResource($leaveApproval);
     }
+
 
     /**
      * Remove the specified resource from storage.
@@ -96,22 +148,52 @@ class LeaveApprovalController extends Controller
     public function destroy($id)
     {
         $leaveApproval = LeaveApproval::findOrFail($id);
+        $leaveRequestId = $leaveApproval->leaverequest_id;
 
-		$is_trashed = $leaveApproval->is_trashed;
+        // Check if leave was approved or conditional approved
+        if (in_array($leaveApproval->status, ['Approved', 'ConditionalApproved', 'ApprovedWithoutPay'])) {
+            // Fetch the related LeaveRequest
+            $leaveRequest = LeaveRequest::find($leaveRequestId);
 
-		if($is_trashed == 1) {
-			$leaveApproval->delete(); // delete country
-		}
-		else{
-            $leaveApproval->is_trashed = '1';
-            $leaveApproval->deleted_at = \Carbon\Carbon::now();
-            $leaveApproval->save();
+            if (!$leaveRequest) {
+                return response()->json(['error' => 'Leave Request not found'], 404);
+            }
+
+            // Get the employee and leave type
+            $employeeId = $leaveRequest->employee_id;
+            $leaveTypeId = $leaveRequest->leavetype_id;
+
+            // Fetch the leave balance record
+            $leaveBalance = LeaveBalance::where('employee_id', $employeeId)
+                ->where('leavetype_id', $leaveTypeId)
+                ->first();
+
+            if (!$leaveBalance) {
+                return response()->json(['error' => 'Leave Balance not found'], 404);
+            }
+
+            // Restore the leave balance
+            $leaveBalance->balance_amount += $leaveApproval->total_days;
+            $leaveBalance->save();
         }
 
-		return response()->json([
-			"message" => "LeaveApproval deleted"
-		], 202);
+        // Delete the leave approval
+        $leaveApproval->delete();
+
+        // Check if there are any other LeaveApproval records for this LeaveRequest
+        $remainingApprovals = LeaveApproval::where('leaverequest_id', $leaveRequestId)->exists();
+
+        if (!$remainingApprovals) {
+            // If no approvals exist, update LeaveRequest status to "Pending"
+            LeaveRequest::where('id', $leaveRequestId)->update(['status' => 'Pending']);
+        }
+
+        return response()->json([
+            "message" => "LeaveApproval deleted, leave balance adjusted, and LeaveRequest status updated if necessary"
+        ], 202);
     }
+
+
 
     /**
      * Display a listing of the trashed items.

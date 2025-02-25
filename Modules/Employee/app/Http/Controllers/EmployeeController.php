@@ -91,7 +91,7 @@ class EmployeeController extends Controller
         $user->assignRole('Employee');
 
         // // Trigger user registration event
-        event(new UserRegistered($user));
+        //event(new UserRegistered($user));
 
 
         $employee = Employee::create([

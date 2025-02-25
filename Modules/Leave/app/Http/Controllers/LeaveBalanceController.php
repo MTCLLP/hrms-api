@@ -151,6 +151,18 @@ class LeaveBalanceController extends Controller
         }
     }
 
+    public function getLeaveBalance(Request $request)
+    {
+        $employee = auth()->user()->employee;
+
+        $balances = LeaveBalance::with(['leavetype'])
+                ->where('employee_id', $employee->id)
+                ->where('is_active', 1)
+                ->get();
+
+        return response()->json($balances);
+    }
+
     /**
      * Store a newly created resource in storage.
      * @param Request $request
