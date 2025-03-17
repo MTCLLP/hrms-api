@@ -12,6 +12,7 @@ use Spatie\QueryBuilder\AllowedFilter;
 use Modules\RBAC\Models\User;
 use Modules\Employee\Models\Employee;
 use Modules\Leave\Models\LeaveRequest;
+use Modules\Leave\Models\LeaveApproval;
 use Modules\Leave\Models\Holiday;
 use Spatie\Permission\Models\Role; // import laravel spatie permission models
 use Modules\RBAC\Transformers\Dashboard as DashboardResource;
@@ -74,7 +75,7 @@ class DashboardController extends Controller
     {
         $holidays = Holiday::where('is_active', 1)->get();
 
-        $leaves = LeaveRequest::with('employee.user')->where('status','Approved')->get();
+        $leaves = LeaveRequest::with('employee.user')->whereNot('status','Rejected')->get();
 
         $calendarData = [];
 
@@ -157,7 +158,14 @@ class DashboardController extends Controller
             ->orderBy('date', 'asc')
             ->first();
 
+        // Check if a holiday was found
+        if ($holiday) {
+            // Format the holiday date
+            $holiday->date = Carbon::parse($holiday->date)->format('d-M-y');
+        }
+
         return response()->json($holiday);
     }
+
 
 }

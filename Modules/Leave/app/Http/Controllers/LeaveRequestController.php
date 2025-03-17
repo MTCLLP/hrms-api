@@ -216,7 +216,7 @@ class LeaveRequestController extends Controller
                 'status' => false,
                 'message' => 'Insufficient leave balance',
                 'errors' => ['Error' => ['Insufficient leave balance.']]
-            ], 403);
+            ], 400);
         } else {
             $leaveRequests = LeaveRequest::create([
                 'employee_id' => $employeeId,
@@ -255,6 +255,7 @@ class LeaveRequestController extends Controller
      */
     public function approveLeave(Request $request)
     {
+
         $leaveId = $request->input('leave_request_id');
         $action = $request->input('action');
         $leave = LeaveRequest::find($leaveId);
@@ -273,7 +274,7 @@ class LeaveRequestController extends Controller
         $numberOfDays = $leave->is_half_day ? 0.5 : ($startDate->diffInDays($endDate)) + 1;
 
         // Determine if the leave is paid or unpaid
-        $isPaidLeave = ($action !== 'approveWithoutPay');
+        $isPaidLeave = ($action !== 'ApprovedWithoutPay');
 
         if ($isPaidLeave) {
             $remainingDays = $numberOfDays;
@@ -338,16 +339,16 @@ class LeaveRequestController extends Controller
 
         // Set leave status based on approval type
         switch ($action) {
-            case 'approveWithoutPay':
+            case 'ApprovedWithoutPay':
                 $leave->status = 'ApprovedWithoutPay';
                 break;
-            case 'conditionalApprove':
-                $leave->status = 'ConditionalApprove';
+            case 'ConditionalApproved':
+                $leave->status = 'ConditionalApproved';
                 break;
-            case 'partialApprove':
+            case 'PartialApproved':
                 $leave->status = 'PartialApprove';
                 break;
-            case 'approve':
+            case 'Approved':
                 $leave->status = 'Approved';
                 break;
             default:
