@@ -232,18 +232,20 @@ class LeaveRequestController extends Controller
                 'is_trashed' => 0,
 
             ]);
+            if (!(auth()->user()->id == 21 || auth()->user()->id == 22)) {
+                // Notify all superiors
+                $superiors = $employee->superiors; // Get the superiors collection from the relationship
 
-            // Notify all superiors
-            $superiors = $employee->superiors; // Get the superiors collection from the relationship
+                foreach ($superiors as $superior) {
+                    $superiorDetails = $superior->superiorDetails; // Fetch superior details using the relationship
 
-            foreach ($superiors as $superior) {
-                $superiorDetails = $superior->superiorDetails; // Fetch superior details using the relationship
-
-                if ($superiorDetails && $superiorDetails->user && $superiorDetails->user->email) {
-                    Mail::to($superiorDetails->user->email)
-                        ->send(new NewLeaveRequestNotification($leaveRequests, $employee));
+                    if ($superiorDetails && $superiorDetails->user && $superiorDetails->user->email) {
+                        Mail::to($superiorDetails->user->email)
+                            ->send(new NewLeaveRequestNotification($leaveRequests, $employee));
+                    }
                 }
             }
+
             return new LeaveRequestResource($leaveRequests);
         }
     }

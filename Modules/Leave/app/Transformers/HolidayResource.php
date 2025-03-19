@@ -17,7 +17,7 @@ class HolidayResource extends JsonResource
         return [
             'id' => $this->id,
             'name' => $this->name,
-            'date' => $this->date,
+            'date' => ($this->date ? Carbon::parse($this->date)->format('d M Y') : null),
             'description' => $this->description,
             'description_short' => Str::limit($this->description, 30),
             'created_by' => $this->createdBy,

@@ -14,7 +14,7 @@ class HolidayController extends Controller
      */
     public function index()
     {
-        $holidays = Holiday::where('is_trashed',false)->orderBy('created_at','asc')->get();
+        $holidays = Holiday::where('is_trashed',false)->orderBy('date','asc')->get();
 
         return HolidayResource::collection($holidays);
     }

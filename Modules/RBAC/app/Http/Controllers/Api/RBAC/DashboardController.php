@@ -168,4 +168,54 @@ class DashboardController extends Controller
     }
 
 
+    public function getEmployeeMonthlyLeaves(Request $request)
+    {
+        // Validate request parameters
+        $request->validate([
+            'employee_id' => 'required|exists:employees,id',
+            'month' => 'required|date_format:Y-m', // Format: YYYY-MM
+        ]);
+
+        // Extract values
+        $employeeId = $request->employee_id;
+        $month = $request->month;
+
+        // Fetch leave requests with approvals (excluding rejected ones)
+        $leaves = LeaveRequest::where('employee_id', $employeeId)
+            ->where('status', '!=', 'Rejected') // Exclude rejected leaves
+            ->whereYear('start_date', date('Y', strtotime($month)))
+            ->whereMonth('start_date', date('m', strtotime($month)))
+            ->with(['employee.user', 'leaveType'])
+            ->with(['leaveApprovals' => function ($query) {
+                $query->whereIn('status', ['Approved', 'PartialApproved', 'ConditionalApproved', 'ApprovedWithoutPay']); // Include only approved statuses
+            }])
+            ->get();
+
+        // Format response
+        $response = $leaves->map(function ($leave) {
+            return [
+                'id' => $leave->id,
+                'employee_id' => $leave->employee_id,
+                'employee_name' => $leave->employee->user->name ?? 'N/A',
+                'leave_type_id' => $leave->leavetype_id,
+                'type_name' => $leave->leaveType->type_name ?? 'N/A',
+                'start_date' => $leave->start_date,
+                'end_date' => $leave->end_date,
+                'status' => $leave->status,
+                'total_days' => $leave->leaveApprovals->total_days ?? 0, // Sum of approved total_days
+                'created_at' => $leave->created_at,
+                'updated_at' => $leave->updated_at,
+            ];
+        });
+
+        return response()->json([
+            'employee_id' => $employeeId,
+            'month' => $month,
+            'leaves' => $response,
+        ]);
+    }
+
+
+
+
 }
