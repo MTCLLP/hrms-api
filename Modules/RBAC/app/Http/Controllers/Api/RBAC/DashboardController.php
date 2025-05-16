@@ -202,7 +202,7 @@ class DashboardController extends Controller
                 'start_date' => $leave->start_date,
                 'end_date' => $leave->end_date,
                 'status' => $leave->status,
-                'total_days' => $leave->leaveApprovals->total_days ?? 0, // Sum of approved total_days
+                'total_days' => $leave->leaveApprovals->sum('total_days') ?? 0,
                 'created_at' => $leave->created_at,
                 'updated_at' => $leave->updated_at,
             ];

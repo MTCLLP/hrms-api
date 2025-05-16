@@ -6,6 +6,7 @@ use Illuminate\Contracts\Support\Renderable;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Modules\Employee\Models\EmployeeContact;
+use Modules\Employee\Http\Requests\EmployeeContactRequest;
 use Modules\Employee\Transformers\EmployeeContactResource as EmployeeContactResource;
 
 class EmployeeContactsController extends Controller
@@ -38,7 +39,7 @@ class EmployeeContactsController extends Controller
      * @param Request $request
      * @return Renderable
      */
-    public function store(Request $request)
+    public function store(EmployeeContactRequest $request)
     {
         $employeeContact = EmployeeContact::create([
             'employee_id' => $request->input('employee_id'),
@@ -69,7 +70,7 @@ class EmployeeContactsController extends Controller
      * @param int $id
      * @return Renderable
      */
-    public function update(Request $request, EmployeeContact $employeeContact)
+    public function update(EmployeeContactRequest $request, EmployeeContact $employeeContact)
     {
         $employeeContact->employee_id = $request->input('employee_id');
         $employeeContact->number = $request->input('number');
