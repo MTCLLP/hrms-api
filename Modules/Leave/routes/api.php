@@ -40,7 +40,7 @@ Route::group(
         Route::patch('/leave-balance/{leaveBalance}', [LeaveBalanceController::class, 'update'])->name('api.leave-balance.update');
         Route::delete('/leave-balance/{id}', [LeaveBalanceController::class, 'destroy'])->name('api.leave-balance.destroy');
         Route::post('/leave-balance-delete-multiple', [LeaveBalanceController::class, 'destroyMultiple'])->name('api.leave-balance.destroy-multiple');
-        Route::get('/get-leave-balance',[LeaveBalanceController::class, 'getLeaveBalance'])->name('api.leave-balance.get-leave-balance');
+        Route::get('/leave-balance/get-leave-balance',[LeaveBalanceController::class, 'getLeaveBalance'])->name('api.leave-balance.get-leave-balance');
 
         Route::get('/leave-entitlement', [LeaveEntitlementController::class, 'index'])->name('api.leave-entitlement.index');
 		Route::get('/leave-entitlement/paginated', [LeaveEntitlementController::class, 'paginated'])->name('api.leave-entitlement.paginated');

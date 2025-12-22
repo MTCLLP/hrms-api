@@ -5,6 +5,7 @@ namespace Modules\Leave\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Modules\Leave\Models\Holiday;
+use Modules\Leave\Http\Requests\HolidayRequest;
 use Modules\Leave\Transformers\HolidayResource as HolidayResource;
 
 class HolidayController extends Controller
@@ -14,7 +15,7 @@ class HolidayController extends Controller
      */
     public function index()
     {
-        $holidays = Holiday::where('is_trashed',false)->orderBy('created_at','asc')->get();
+        $holidays = Holiday::where('is_trashed',false)->orderBy('date','asc')->get();
 
         return HolidayResource::collection($holidays);
     }
@@ -35,19 +36,18 @@ class HolidayController extends Controller
      * @param Setting $Setting
      * @return Renderable
      */
-    public function store(Request $request)
+    public function store(HolidayRequest $request)
     {
-        $holidays = Holiday::create([
-            'name' => $request->input('name'),
-            'date' => $request->input('date'),
-            'description' => $request->input('description'),
-            'created_by' => auth()->user()->id,
+        $holiday = Holiday::create([
+            'name' => $request->name,
+            'date' => $request->date,
+            'description' => $request->description,
+            'created_by' => auth()->id(),
             'is_active' => 1,
             'is_trashed' => 0,
-
         ]);
 
-        return new HolidayResource($holidays);
+        return new HolidayResource($holiday);
     }
 
     /**
@@ -61,7 +61,7 @@ class HolidayController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, Holiday $holiday)
+    public function update(HolidayRequest $request, Holiday $holiday)
     {
         $holiday->name = $request->input('name');
         $holiday->date = $request->input('date');

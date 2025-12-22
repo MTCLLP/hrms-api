@@ -101,5 +101,6 @@ Route::group(
         Route::get('get-upcoming-leaves',[DashboardController::class,'upcomingLeaves'])->name('api.dashboard.upcomingLeaves');
         Route::get('get-upcoming-birthdays',[DashboardController::class,'upcomingBirthdays'])->name('api.dashboard.upcomingBirthdays');
         Route::get('get-upcoming-holiday',[DashboardController::class,'getUpcomingHoliday'])->name('api.dashboard.getUpcomingHoliday');
+        Route::get('get-monthly-leaves',[DashboardController::class,'getEmployeeMonthlyLeaves'])->name('api.dashboard.getEmployeeMonthlyLeaves');
     }
 );

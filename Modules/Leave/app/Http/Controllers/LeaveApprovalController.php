@@ -8,6 +8,10 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Spatie\QueryBuilder\QueryBuilder;
 use Spatie\QueryBuilder\AllowedFilter;
+use Modules\Leave\Mail\NewLeaveRequestNotification;
+use Modules\Leave\Mail\LeaveApprovalNotification;
+use Modules\Leave\Mail\LeaveRejectionNotification;
+use Illuminate\Support\Facades\Mail;
 
 <<<<<<< HEAD
 
@@ -145,8 +149,18 @@ class LeaveApprovalController extends Controller
         // Save the updated balance
         $leaveBalance->save();
 
+        // Send the appropriate email notification
+        if (in_array($data['status'], ['Approved', 'ConditionalApproved'])) {
+            Mail::to($leaveRequest->employee->user->email)
+                ->send(new LeaveApprovalNotification($leaveRequest, auth()->user()));
+        } elseif (in_array($data['status'], ['Rejected', 'ApprovedWithoutPay'])) {
+            Mail::to($leaveRequest->employee->user->email)
+                ->send(new LeaveRejectionNotification($leaveRequest, auth()->user()));
+        }
+
         return new LeaveApprovalResource($leaveApproval);
     }
+
 
 
     /**

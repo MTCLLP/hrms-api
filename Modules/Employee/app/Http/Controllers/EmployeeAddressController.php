@@ -6,6 +6,7 @@ use Illuminate\Contracts\Support\Renderable;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Modules\Employee\Models\EmployeeAddress;
+use Modules\Employee\Http\Requests\EmployeeAddressRequest;
 use Modules\Employee\Transformers\EmployeeAddressResource as EmployeeAddressResource;
 
 class EmployeeAddressController extends Controller
@@ -38,7 +39,7 @@ class EmployeeAddressController extends Controller
      * @param Request $request
      * @return Renderable
      */
-    public function store(Request $request)
+    public function store(EmployeeAddressRequest $request)
     {
         $employeeAddress = EmployeeAddress::create([
             'employee_id' => $request->input('employee_id'),
@@ -69,7 +70,7 @@ class EmployeeAddressController extends Controller
      * @param int $id
      * @return Renderable
      */
-    public function update(Request $request, EmployeeAddress $employeeAddress)
+    public function update(EmployeeAddressRequest $request, EmployeeAddress $employeeAddress)
     {
         $employeeAddress->employee_id = $request->input('employee_id');
         $employeeAddress->address = $request->input('address');

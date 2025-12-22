@@ -101,6 +101,7 @@ class LeaveRequestController extends Controller
 
         if ($user->hasRole('Administrator') or $user->hasRole('Superadmin')) {
             $leaveRequests = LeaveRequest::where('is_trashed', false)
+            ->orderByRaw("CASE WHEN status = 'Pending' THEN 0 ELSE 1 END")
                 ->orderBy('created_at', 'desc')
                 ->paginate(10);
         } elseif ($user->hasRole('Manager')) {
@@ -112,6 +113,7 @@ class LeaveRequestController extends Controller
 
             $leaveRequests = LeaveRequest::where('is_trashed', false)
                 ->whereIn('employee_id', $subordinateIds->push($managerEmployeeId)) // Add manager's own ID
+                ->orderByRaw("CASE WHEN status = 'Pending' THEN 0 ELSE 1 END")
                 ->orderBy('created_at', 'desc')
                 ->paginate(10);
         } elseif ($user->hasRole('Employee')) {
@@ -119,6 +121,7 @@ class LeaveRequestController extends Controller
 
             $leaveRequests = LeaveRequest::where('is_trashed', false)
                 ->where('employee_id', $employeeId)
+                ->orderByRaw("CASE WHEN status = 'Pending' THEN 0 ELSE 1 END")
                 ->orderBy('created_at', 'desc')
                 ->paginate(10);
         } else {
@@ -232,18 +235,20 @@ class LeaveRequestController extends Controller
                 'is_trashed' => 0,
 
             ]);
+            if (!(auth()->user()->id == 21 || auth()->user()->id == 22)) {
+                // Notify all superiors
+                $superiors = $employee->superiors; // Get the superiors collection from the relationship
 
-            // Notify all superiors
-            $superiors = $employee->superiors; // Get the superiors collection from the relationship
+                foreach ($superiors as $superior) {
+                    $superiorDetails = $superior->superiorDetails; // Fetch superior details using the relationship
 
-            foreach ($superiors as $superior) {
-                $superiorDetails = $superior->superiorDetails; // Fetch superior details using the relationship
-
-                if ($superiorDetails && $superiorDetails->user && $superiorDetails->user->email) {
-                    Mail::to($superiorDetails->user->email)
-                        ->send(new NewLeaveRequestNotification($leaveRequests, $employee));
+                    if ($superiorDetails && $superiorDetails->user && $superiorDetails->user->email) {
+                        Mail::to($superiorDetails->user->email)
+                            ->send(new NewLeaveRequestNotification($leaveRequests, $employee));
+                    }
                 }
             }
+
             return new LeaveRequestResource($leaveRequests);
         }
     }
