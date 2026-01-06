@@ -35,12 +35,13 @@ Route::group(
         Route::get('/leave-balance/paginated', [LeaveBalanceController::class, 'paginated'])->name('api.leave-balance.paginated');
         Route::get('/leave-balance/trash', [LeaveBalanceController::class, 'trash'])->name('api.leave-balance.trash');
         Route::get('/leave-balance/restore/{id}', [LeaveBalanceController::class, 'restore'])->name('api.leave-balance.restore');
+        Route::get('/leave-balance/get-leave-balance',[LeaveBalanceController::class, 'getLeaveBalance'])->name('api.leave-balance.get-leave-balance');
         Route::post('/leave-balance', [LeaveBalanceController::class, 'store'])->name('api.leave-balance.store');
         Route::get('/leave-balance/{leaveBalance}', [LeaveBalanceController::class, 'show'])->name('api.leave-balance.show');
         Route::patch('/leave-balance/{leaveBalance}', [LeaveBalanceController::class, 'update'])->name('api.leave-balance.update');
         Route::delete('/leave-balance/{id}', [LeaveBalanceController::class, 'destroy'])->name('api.leave-balance.destroy');
         Route::post('/leave-balance-delete-multiple', [LeaveBalanceController::class, 'destroyMultiple'])->name('api.leave-balance.destroy-multiple');
-        Route::get('/leave-balance/get-leave-balance',[LeaveBalanceController::class, 'getLeaveBalance'])->name('api.leave-balance.get-leave-balance');
+
 
         Route::get('/leave-entitlement', [LeaveEntitlementController::class, 'index'])->name('api.leave-entitlement.index');
 		Route::get('/leave-entitlement/paginated', [LeaveEntitlementController::class, 'paginated'])->name('api.leave-entitlement.paginated');
@@ -64,6 +65,7 @@ Route::group(
         Route::post('/leave-request/approve-leave', [LeaveRequestController::class, 'approveLeave'])->name('api.leave-request.approve-leave');
         Route::post('/leave-request/reject-leave', [LeaveRequestController::class, 'rejectLeave'])->name('api.leave-request.reject-leave');
         Route::post('/leave-request/partial-approve-leave', [LeaveRequestController::class, 'partialApproval'])->name('api.leave-request.partial-approve-leave');
+        Route::get('/leave-request/get-employee-leave-requests/{employeeId}', [LeaveRequestController::class, 'getEmployeeLeaves'])->name('api.leave-request.get-employee-leaves');
 
         Route::get('/leave-setting', [LeaveSettingController::class,'index'])->name('api.leave-setting.index');
 		Route::get('/leave-setting/paginated', [LeaveSettingController::class,'paginated'])->name('api.leave-setting.paginated');

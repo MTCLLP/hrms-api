@@ -5,11 +5,14 @@ namespace Modules\Leave\Models;
 use Illuminate\Database\Eloquent\Model;
 use Modules\Leave\Models\LeaveRequest;
 use Modules\Employee\Models\Employee;
+use Modules\Localization\Models\CalendarYear;
+use Modules\Localization\Traits\BelongsToCalendarYear;
 
 
 class LeaveApproval extends Model
 {
 
+    use BelongsToCalendarYear;
     /**
      * The attributes that are mass assignable.
      */
@@ -37,6 +40,10 @@ class LeaveApproval extends Model
     public function approver()
     {
         return $this->belongsTo(Employee::class, 'approver_id', 'id');
+    }
+
+    public function calendarYear() {
+        return $this->belongsTo(CalendarYear::class, 'calendar_year_id');
     }
 
 

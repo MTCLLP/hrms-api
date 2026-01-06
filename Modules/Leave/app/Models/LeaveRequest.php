@@ -8,11 +8,16 @@ use Modules\Employee\Models\Employee;
 use Modules\Leave\Models\LeaveType;
 use Modules\Leave\Models\LeaveBalance;
 use Modules\Leave\Models\LeaveApproval;
+use Modules\Localization\Models\CalendarYear;
+use Modules\Localization\Traits\BelongsToCalendarYear;
+
 use App\Scopes\CreatedByScope;
+
 
 class LeaveRequest extends Model
 {
-    protected $fillable = ["employee_id","start_date","end_date","leavetype_id","is_half_day","leave_description","status","comments","is_active", "is_trashed", "created_by"];
+    use BelongsToCalendarYear;
+    protected $fillable = ["employee_id","start_date","end_date","leavetype_id","is_half_day","leave_description","status","reason","comments","is_active", "is_trashed", "created_by"];
 
 
     public function employee()
@@ -34,6 +39,10 @@ class LeaveRequest extends Model
     public function leaveApprovals()
     {
         return $this->hasMany(LeaveApproval::class, 'leaverequest_id', 'id');
+    }
+
+    public function calendarYear() {
+        return $this->belongsTo(CalendarYear::class, 'calendar_year_id');
     }
 
 

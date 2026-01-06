@@ -23,6 +23,7 @@ return new class extends Migration
             $table->string('leave_description')->nullable();
             $table->bigInteger('leavetype_id')->unsigned()->index()->nullable();
             $table->foreign('leavetype_id')->references('id')->on('leave_types')->onDelete('set null')->onUpdate('cascade');
+            $table->string('reason');
             $table->string('status')->default('Pending');//Approved, Pending
             $table->string('comments');
             $table->bigInteger('created_by')->unsigned()->index()->nullable();

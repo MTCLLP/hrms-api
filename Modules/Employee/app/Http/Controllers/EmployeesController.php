@@ -106,6 +106,7 @@ class EmployeesController extends Controller
 
         return response()->json([
             'status' => true,
+            'id' => $employee->id,
             'message' => 'Employee Created Successfully'
             //'token' => $user->createToken("API TOKEN")->plainTextToken
         ], 200);

@@ -51,7 +51,7 @@ class LeaveBalanceController extends Controller
             // Employee: fetch entitlements for the logged-in employee
             $employee = $user->employee;
 
-            if (!$employee) {
+            if (! $employee) {
                 abort(403, 'Employee record not found');
             }
 
@@ -101,6 +101,7 @@ class LeaveBalanceController extends Controller
 
     /**
      * Display a paginated listing of the resource.
+     *
      * @return Response
      */
     public function paginated()
@@ -132,7 +133,7 @@ class LeaveBalanceController extends Controller
             // Employee: fetch leave balances for the specific employee with pagination
             $employee = $user->employee; // Get the employee record associated with the user
 
-            if (!$employee) {
+            if (! $employee) {
                 abort(403, 'Employee record not found');
             }
 
@@ -155,19 +156,20 @@ class LeaveBalanceController extends Controller
 
     public function getLeaveBalance(Request $request)
     {
+
         $employee = auth()->user()->employee;
 
         $balances = LeaveBalance::with(['leavetype'])
-                ->where('employee_id', $employee->id)
-                ->where('is_active', 1)
-                ->get();
+            ->where('employee_id', $employee->id)
+            ->where('is_active', 1)
+            ->get();
 
         return response()->json($balances);
     }
 
     /**
      * Store a newly created resource in storage.
-     * @param Request $request
+     *
      * @return Renderable
      */
     public function store(Request $request)
@@ -227,12 +229,17 @@ class LeaveBalanceController extends Controller
         }
 
         return response()->json([
+<<<<<<< HEAD
             "message" => "Leave Balance deleted"
+=======
+            'message' => 'Leave Balance deleted',
+>>>>>>> 82d95c6a3bda79baf9d4422d2aa6a4701b72cab5
         ], 202);
     }
 
     /**
      * Display a listing of the trashed items.
+     *
      * @return Response
      */
     public function trash()
@@ -254,7 +261,11 @@ class LeaveBalanceController extends Controller
         $leaveBalance->save();
 
         return response()->json([
+<<<<<<< HEAD
             "message" => "Leave Balance restored successfully"
+=======
+            'message' => 'Leave Balance restored successfully',
+>>>>>>> 82d95c6a3bda79baf9d4422d2aa6a4701b72cab5
         ], 202);
     }
 
@@ -267,32 +278,26 @@ class LeaveBalanceController extends Controller
      *
      *
 
-     * @param \Illuminate\Http\Request $request
      * @return \Illuminate\Http\JsonResponse
      */
     public function destroyMultiple(Request $request)
     {
         $ids = $request->ids; // Get the array of IDs from the request
 
-
         if (empty($ids)) {
             return response()->json([
-                "message" => "No department IDs provided"
+                'message' => 'No department IDs provided',
             ], 400);
         }
-
 
         // Get all companies that match the IDs provided
         $leaveBalances = LeaveBalance::whereIn('id', $ids)->get();
 
-
         $deletedPermanently = [];
         $softDeleted = [];
 
-
         foreach ($leaveBalances as $leaveBalance) {
             $is_trashed = $leaveBalance->is_trashed;
-
 
             if ($is_trashed == 1) {
                 // If already trashed, permanently delete
@@ -307,11 +312,10 @@ class LeaveBalanceController extends Controller
             }
         }
 
-
         return response()->json([
-            "message" => "Leave Balance processed",
-            "deleted_permanently" => $deletedPermanently,
-            "soft_deleted" => $softDeleted,
+            'message' => 'Leave Balance processed',
+            'deleted_permanently' => $deletedPermanently,
+            'soft_deleted' => $softDeleted,
         ], 202);
     }
 }
