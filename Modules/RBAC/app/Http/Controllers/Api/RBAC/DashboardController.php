@@ -214,8 +214,4 @@ class DashboardController extends Controller
             'leaves' => $response,
         ]);
     }
-
-
-
-
 }

@@ -22,9 +22,7 @@ class EmployeesController extends Controller
      */
     public function index()
     {
-
         $employees = Employee::where('is_trashed',false)->orderBy('created_at','desc')->get();
-
 
         return EmployeeResource::collection($employees);
     }
