@@ -29,6 +29,7 @@ class LeaveRequestResource extends JsonResource
             'is_half_day' => $this->is_half_day ? 'Yes' : 'No',
             'leave_description' => $this->leave_description,
             'comments' => $this->comments,
+            'reason' => $this->reason,
             'start_date' => $this->start_date,
             'start_date_formatted' => ($this->start_date ? Carbon::parse($this->start_date)->format('d M Y') : null),
             'end_date' => $this->end_date,
@@ -38,6 +39,7 @@ class LeaveRequestResource extends JsonResource
             'is_active' => $this->is_active,
             'is_trashed' => $this->is_trashed,
             'created_at' => ($this->created_at ? Carbon::parse($this->created_at)->diffForHumans() : null),
+            'created_at_raw' => $this->created_at,
             'updated_at' => ($this->updated_at ? Carbon::parse($this->updated_at)->diffForHumans() : null),
         ];
     }

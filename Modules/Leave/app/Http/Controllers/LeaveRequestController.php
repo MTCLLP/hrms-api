@@ -151,7 +151,7 @@ class LeaveRequestController extends Controller
         if ($startDate->isWeekend() || $endDate->isWeekend()) {
             return response()->json([
                 'status' => false,
-                'message' => 'Leave cannot start on a weekend',
+                'message' => 'Leave cannot start or end on a weekend',
                 'errors' => ['Error' => ['Start date and end date cannot be a Saturday or Sunday.']]
             ], 400);
 
@@ -208,19 +208,20 @@ class LeaveRequestController extends Controller
                 'errors' => ['Error' => ['You can only take 5 days of leave at once!.']]
             ], 400);
         }
-        elseif ($numberOfDays > $getLeaveEntitlement) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Leave days exceed entitlement',
-                'errors' => ['Error' => ['Leave days exceed entitlement!.']]
-            ], 400);
-        } elseif ($numberOfDays > $getLeaveBalance) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Insufficient leave balance',
-                'errors' => ['Error' => ['Insufficient leave balance.']]
-            ], 400);
-        } else {
+        // elseif ($numberOfDays > $getLeaveEntitlement) {
+        //     return response()->json([
+        //         'status' => false,
+        //         'message' => 'Leave days exceed entitlement',
+        //         'errors' => ['Error' => ['Leave days exceed entitlement!.']]
+        //     ], 400);
+        // } elseif ($numberOfDays > $getLeaveBalance) {
+        //     return response()->json([
+        //         'status' => false,
+        //         'message' => 'Insufficient leave balance',
+        //         'errors' => ['Error' => ['Insufficient leave balance.']]
+        //     ], 400);
+        // }
+        else {
             $leaveRequests = LeaveRequest::create([
                 'employee_id' => $employeeId,
                 'start_date' => $request->input('start_date'),
@@ -228,6 +229,7 @@ class LeaveRequestController extends Controller
                 'leavetype_id' => $request->input('selectedLeaveType'),
                 'is_half_day' => $request->input('is_half_day'),
                 'leave_description' => $request->input('leave_description'),
+                'reason' => $request->input('reason'),
                 // 'status' => $request->input('status'),
                 // 'comments' => $request->input('comments'),
                 'created_by' => auth()->user()->id,
@@ -656,6 +658,7 @@ class LeaveRequestController extends Controller
             $leaveRequest->status = $request->input('status');
             $leaveRequest->comments = $request->input('comments');
             $leaveRequest->leave_description = $request->input('leave_description');
+            $leaveRequest->reason = $request->input('reason');
             $leaveRequest->is_active = $request->input('is_active');
             $leaveRequest->is_trashed = $request->input('is_trashed');
             $leaveRequest->created_by = auth()->user()->id;
@@ -768,5 +771,22 @@ class LeaveRequestController extends Controller
             "deleted_permanently" => $deletedPermanently,
             "soft_deleted" => $softDeleted,
         ], 202);
+    }
+
+    public function getEmployeeLeaves(Request $request, $employeeId)
+    {
+        $user = auth()->user();
+
+        // Ensure the user is authorized to view this employee's leaves
+        if ($user->hasRole('Administrator') || $user->hasRole('Superadmin') || ($user->hasRole('Employee') && $user->employee->id == $employeeId)) {
+            $leaveRequests = LeaveRequest::where('employee_id', $employeeId)
+                ->where('is_trashed', false)
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            return LeaveRequestResource::collection($leaveRequests);
+        } else {
+            return response()->json(['error' => 'Unauthorized access'], 403);
+        }
     }
 }

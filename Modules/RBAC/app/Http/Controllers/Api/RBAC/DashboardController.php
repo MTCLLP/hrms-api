@@ -42,6 +42,9 @@ class DashboardController extends Controller
         $leaveRequests = QueryBuilder::for(LeaveRequest::class)
             ->whereIn('employee_id', $subordinateIds)
             ->where('is_trashed', false)
+            ->when($request->filled('statuses'), function ($query) use ($request) {
+            $query->whereIn('status', $request->statuses);
+            })
             ->allowedFilters([
                 AllowedFilter::exact('status'),
                 AllowedFilter::scope('start_date'),
@@ -73,9 +76,9 @@ class DashboardController extends Controller
 
     function displayCalendar()
     {
-        $holidays = Holiday::where('is_active', 1)->get();
+        $holidays = Holiday::withoutGlobalScope('activeYear')->where('is_active', 1)->get();
 
-        $leaves = LeaveRequest::with('employee.user')->whereNot('status','Rejected')->get();
+        $leaves = LeaveRequest::withoutGlobalScope('activeYear')->with('employee.user')->whereNot('status','Rejected')->where('is_trashed',0)->get();
 
         $calendarData = [];
 
@@ -97,6 +100,7 @@ class DashboardController extends Controller
 
             while ($startDate <= $endDate) {
                 $calendarData[] = [
+                    'id' => $leave->id,
                     'type' => 'leave',
                     'title' => $leave->employee->user->name . "'s Leave",
                     'start' => $startDate->toDateString(), // Each day within the range
@@ -170,52 +174,203 @@ class DashboardController extends Controller
 
     public function getEmployeeMonthlyLeaves(Request $request)
     {
-        // Validate request parameters
         $request->validate([
-            'employee_id' => 'required|exists:employees,id',
-            'month' => 'required|date_format:Y-m', // Format: YYYY-MM
+            'month' => 'required|date_format:Y-m',
+            'employee_id' => 'nullable|exists:employees,id',
+            'status' => 'nullable|in:Approved,PartialApproved,ConditionalApproved,ApprovedWithoutPay'
         ]);
 
-        // Extract values
         $employeeId = $request->employee_id;
         $month = $request->month;
+        $status = $request->status;
 
-        // Fetch leave requests with approvals (excluding rejected ones)
-        $leaves = LeaveRequest::where('employee_id', $employeeId)
-            ->where('status', '!=', 'Rejected') // Exclude rejected leaves
-            ->whereYear('start_date', date('Y', strtotime($month)))
-            ->whereMonth('start_date', date('m', strtotime($month)))
+        $monthStart = Carbon::parse($month)->startOfMonth();
+        $monthEnd = Carbon::parse($month)->endOfMonth();
+
+        // Build the base query
+        $leavesQuery = LeaveRequest::where(function ($q) use ($monthStart, $monthEnd) {
+                $q->whereBetween('start_date', [$monthStart, $monthEnd])
+                  ->orWhereBetween('end_date', [$monthStart, $monthEnd])
+                  ->orWhere(function ($sub) use ($monthStart, $monthEnd) {
+                      $sub->where('start_date', '<', $monthStart)
+                          ->where('end_date', '>', $monthEnd);
+                  });
+            })
             ->with(['employee.user', 'leaveType'])
             ->with(['leaveApprovals' => function ($query) {
-                $query->whereIn('status', ['Approved', 'PartialApproved', 'ConditionalApproved', 'ApprovedWithoutPay']); // Include only approved statuses
-            }])
-            ->get();
+                $query->whereIn('status', [
+                    'Approved',
+                    'PartialApproved',
+                    'ConditionalApproved',
+                    'ApprovedWithoutPay'
+                ]);
+            }]);
 
-        // Format response
-        $response = $leaves->map(function ($leave) {
+        if ($employeeId) {
+            $leavesQuery->where('employee_id', $employeeId);
+        }
+
+        if ($status) {
+            $leavesQuery->where('status', $status);
+        }
+
+        $leaves = $leavesQuery->get();
+
+        // Group by employee and calculate totals
+        $groupedLeaves = $leaves->groupBy('employee_id')->map(function ($leaveGroup) use ($monthStart, $monthEnd) {
+            $employee = $leaveGroup->first()->employee;
+            $user = $employee->user;
+
             return [
-                'id' => $leave->id,
-                'employee_id' => $leave->employee_id,
-                'employee_name' => $leave->employee->user->name ?? 'N/A',
-                'leave_type_id' => $leave->leavetype_id,
-                'type_name' => $leave->leaveType->type_name ?? 'N/A',
-                'start_date' => $leave->start_date,
-                'end_date' => $leave->end_date,
-                'status' => $leave->status,
-                'total_days' => $leave->leaveApprovals->sum('total_days') ?? 0,
-                'created_at' => $leave->created_at,
-                'updated_at' => $leave->updated_at,
+                'employee_id' => $employee->id,
+                'employee_name' => $user->name ?? 'N/A',
+                'total_leave_count' => $leaveGroup->count(),
+                'total_leave_days' => round($leaveGroup->sum(function ($leave) use ($monthStart, $monthEnd) {
+                    return $leave->leaveApprovals->sum(function ($approval) use ($leave, $monthStart, $monthEnd) {
+                        $start = Carbon::parse($approval->start_date);
+                        $end = Carbon::parse($approval->end_date);
+
+                        // Determine overlapping range with the current month
+                        $rangeStart = $start->greaterThan($monthStart) ? $start : $monthStart;
+                        $rangeEnd = $end->lessThan($monthEnd) ? $end : $monthEnd;
+
+                        if ($rangeEnd->lt($rangeStart)) {
+                            return 0; // No overlap
+                        }
+
+                        $days = CarbonPeriod::create($rangeStart, $rangeEnd)->count();
+
+                        // Half-day correction
+                        if ($leave->is_half_day) {
+                            $days = 0.5;
+                        }
+
+                        return $days;
+                    });
+                }), 2),
+                'leaves' => $leaveGroup->map(function ($leave) use ($monthStart, $monthEnd) {
+                    $daysInMonth = round($leave->leaveApprovals->sum(function ($approval) use ($leave, $monthStart, $monthEnd) {
+                        $start = Carbon::parse($approval->start_date);
+                        $end = Carbon::parse($approval->end_date);
+
+                        $rangeStart = $start->greaterThan($monthStart) ? $start : $monthStart;
+                        $rangeEnd = $end->lessThan($monthEnd) ? $end : $monthEnd;
+
+                        if ($rangeEnd->lt($rangeStart)) {
+                            return 0;
+                        }
+
+                        $days = CarbonPeriod::create($rangeStart, $rangeEnd)->count();
+
+                        if ($leave->is_half_day) {
+                            $days = 0.5;
+                        }
+
+                        return $days;
+                    }), 2);
+
+                    return [
+                        'id' => $leave->id,
+                        'leave_type_id' => $leave->leavetype_id,
+                        'type_name' => $leave->leaveType->type_name ?? 'N/A',
+                        'start_date' => $leave->start_date,
+                        'end_date' => $leave->end_date,
+                        'status' => $leave->status,
+                        'total_days_in_month' => $daysInMonth,
+                        'created_at' => $leave->created_at,
+                        'updated_at' => $leave->updated_at,
+                    ];
+                })
             ];
         });
+
+        // ✅ Sort alphabetically by employee_name
+        $sortedGroupedLeaves = $groupedLeaves->sortBy('employee_name')->values();
 
         return response()->json([
             'employee_id' => $employeeId,
             'month' => $month,
-            'leaves' => $response,
+            'status' => $status,
+            'grouped_leaves' => $sortedGroupedLeaves
         ]);
     }
 
 
+    //Check how many employees have upcoming confirmation_date in next 30 days by using hire_date from employees table. confirmation_date is hire_date + 6 months. if confirmation_date is null, it means employee is not yet confirmed.
+
+    public function upcomingConfirmations()
+    {
+        $today = Carbon::today();
+        $upcomingDate = $today->copy()->addDays(30);
+
+        $employees = Employee::whereNotNull('hire_date')->where('confirmation_date', NULL)->with('user')
+            ->get()
+            ->filter(function ($employee) use ($today, $upcomingDate) {
+                $confirmationDate = Carbon::parse($employee->hire_date)->addMonths(6);
+                return $confirmationDate->between($today, $upcomingDate);
+            });
+
+        return response()->json($employees->values());
+    }
 
 
+    //Confirm Employee
+    public function confirmEmployee(Request $request)
+    {
+
+        // Validate request parameters
+        $request->validate([
+            'employeeId' => 'required|exists:employees,id',
+            'confirmation_date' => 'required|date',
+        ]);
+
+        // Find the employee
+        $employee = Employee::findOrFail($request->employeeId);
+
+        // Update confirmation date and status
+        $employee->confirmation_date = $request->confirmation_date;
+        $employee->save();
+
+        return response()->json([
+            'message' => 'Employee confirmed successfully.',
+            'employee' => $employee,
+        ]);
+    }
+
+    //Extend Confirmation
+    public function extendConfirmation(Request $request)
+    {
+        // Validate request parameters
+        $request->validate([
+            'employeeId' => 'required|exists:employees,id',
+            'newDate' => 'required|date|after:confirmation_date',
+        ]);
+
+        // Find the employee
+        $employee = Employee::findOrFail($request->employeeId);
+
+        // Update confirmation date
+        $employee->confirmation_date = $request->newDate;
+        $employee->save();
+
+        return response()->json([
+            'message' => 'Employee confirmation extended successfully.',
+            'employee' => $employee,
+        ]);
+    }
+
+    public function revokeConfirmation(Request $request, $employeeId)
+    {
+        // Find the employee
+        $employee = Employee::findOrFail($employeeId);
+
+        // Revoke confirmation by setting confirmation_date to null
+        $employee->confirmation_date = null;
+        $employee->save();
+
+        return response()->json([
+            'message' => 'Employee confirmation revoked successfully.',
+            'employee' => $employee,
+        ]);
+    }
 }
