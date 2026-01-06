@@ -7,6 +7,7 @@ use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
 
 use Carbon\Carbon;
+use Carbon\CarbonPeriod;
 use Spatie\QueryBuilder\QueryBuilder;
 use Spatie\QueryBuilder\AllowedFilter;
 use Modules\RBAC\Models\User;
@@ -175,17 +176,19 @@ class DashboardController extends Controller
     public function getEmployeeMonthlyLeaves(Request $request)
     {
         $request->validate([
-            'month' => 'required|date_format:Y-m',
+            'year' => 'required|integer',
+            'month' => 'required|integer|min:1|max:12',
             'employee_id' => 'nullable|exists:employees,id',
             'status' => 'nullable|in:Approved,PartialApproved,ConditionalApproved,ApprovedWithoutPay'
         ]);
 
         $employeeId = $request->employee_id;
+        $year = $request->year;
         $month = $request->month;
         $status = $request->status;
 
-        $monthStart = Carbon::parse($month)->startOfMonth();
-        $monthEnd = Carbon::parse($month)->endOfMonth();
+        $monthStart = Carbon::create($year, $month, 1)->startOfMonth();
+        $monthEnd = Carbon::create($year, $month, 1)->endOfMonth();
 
         // Build the base query
         $leavesQuery = LeaveRequest::where(function ($q) use ($monthStart, $monthEnd) {
@@ -221,53 +224,54 @@ class DashboardController extends Controller
             $employee = $leaveGroup->first()->employee;
             $user = $employee->user;
 
+            $calculateDays = function ($startDate, $endDate, $isHalfDay) use ($monthStart, $monthEnd) {
+                $start = Carbon::parse($startDate);
+                $end = Carbon::parse($endDate);
+
+                // Determine overlapping range with the current month
+                $rangeStart = $start->greaterThan($monthStart) ? $start : $monthStart;
+                $rangeEnd = $end->lessThan($monthEnd) ? $end : $monthEnd;
+
+                if ($rangeEnd->lt($rangeStart)) {
+                    return 0; // No overlap
+                }
+
+                $days = CarbonPeriod::create($rangeStart, $rangeEnd)->count();
+
+                // Half-day correction
+                if ($isHalfDay) {
+                    $days = 0.5;
+                }
+
+                return $days;
+            };
+
             return [
                 'employee_id' => $employee->id,
                 'employee_name' => $user->name ?? 'N/A',
                 'total_leave_count' => $leaveGroup->count(),
-                'total_leave_days' => round($leaveGroup->sum(function ($leave) use ($monthStart, $monthEnd) {
-                    return $leave->leaveApprovals->sum(function ($approval) use ($leave, $monthStart, $monthEnd) {
-                        $start = Carbon::parse($approval->start_date);
-                        $end = Carbon::parse($approval->end_date);
-
-                        // Determine overlapping range with the current month
-                        $rangeStart = $start->greaterThan($monthStart) ? $start : $monthStart;
-                        $rangeEnd = $end->lessThan($monthEnd) ? $end : $monthEnd;
-
-                        if ($rangeEnd->lt($rangeStart)) {
-                            return 0; // No overlap
-                        }
-
-                        $days = CarbonPeriod::create($rangeStart, $rangeEnd)->count();
-
-                        // Half-day correction
-                        if ($leave->is_half_day) {
-                            $days = 0.5;
-                        }
-
-                        return $days;
-                    });
+                'total_leave_days' => round($leaveGroup->sum(function ($leave) use ($calculateDays) {
+                    if ($leave->leaveApprovals->isNotEmpty()) {
+                        return $leave->leaveApprovals->sum(function ($approval) use ($leave, $calculateDays) {
+                            return $calculateDays($approval->start_date, $approval->end_date, $leave->is_half_day);
+                        });
+                    } elseif (in_array($leave->status, ['Approved', 'ApprovedWithoutPay', 'ConditionalApproved'])) {
+                        return $calculateDays($leave->start_date, $leave->end_date, $leave->is_half_day);
+                    }
+                    return 0;
                 }), 2),
-                'leaves' => $leaveGroup->map(function ($leave) use ($monthStart, $monthEnd) {
-                    $daysInMonth = round($leave->leaveApprovals->sum(function ($approval) use ($leave, $monthStart, $monthEnd) {
-                        $start = Carbon::parse($approval->start_date);
-                        $end = Carbon::parse($approval->end_date);
+                'leaves' => $leaveGroup->map(function ($leave) use ($calculateDays) {
+                    $daysInMonth = 0;
 
-                        $rangeStart = $start->greaterThan($monthStart) ? $start : $monthStart;
-                        $rangeEnd = $end->lessThan($monthEnd) ? $end : $monthEnd;
+                    if ($leave->leaveApprovals->isNotEmpty()) {
+                        $daysInMonth = $leave->leaveApprovals->sum(function ($approval) use ($leave, $calculateDays) {
+                            return $calculateDays($approval->start_date, $approval->end_date, $leave->is_half_day);
+                        });
+                    } elseif (in_array($leave->status, ['Approved', 'ApprovedWithoutPay', 'ConditionalApproved'])) {
+                        $daysInMonth = $calculateDays($leave->start_date, $leave->end_date, $leave->is_half_day);
+                    }
 
-                        if ($rangeEnd->lt($rangeStart)) {
-                            return 0;
-                        }
-
-                        $days = CarbonPeriod::create($rangeStart, $rangeEnd)->count();
-
-                        if ($leave->is_half_day) {
-                            $days = 0.5;
-                        }
-
-                        return $days;
-                    }), 2);
+                    $daysInMonth = round($daysInMonth, 2);
 
                     return [
                         'id' => $leave->id,
@@ -289,6 +293,7 @@ class DashboardController extends Controller
 
         return response()->json([
             'employee_id' => $employeeId,
+            'year' => $year,
             'month' => $month,
             'status' => $status,
             'grouped_leaves' => $sortedGroupedLeaves
