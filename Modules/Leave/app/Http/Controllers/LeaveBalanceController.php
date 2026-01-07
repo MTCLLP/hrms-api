@@ -229,11 +229,7 @@ class LeaveBalanceController extends Controller
         }
 
         return response()->json([
-<<<<<<< HEAD
             "message" => "Leave Balance deleted"
-=======
-            'message' => 'Leave Balance deleted',
->>>>>>> 82d95c6a3bda79baf9d4422d2aa6a4701b72cab5
         ], 202);
     }
 
@@ -261,11 +257,7 @@ class LeaveBalanceController extends Controller
         $leaveBalance->save();
 
         return response()->json([
-<<<<<<< HEAD
             "message" => "Leave Balance restored successfully"
-=======
-            'message' => 'Leave Balance restored successfully',
->>>>>>> 82d95c6a3bda79baf9d4422d2aa6a4701b72cab5
         ], 202);
     }
 

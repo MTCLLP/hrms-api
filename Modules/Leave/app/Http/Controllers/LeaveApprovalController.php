@@ -13,12 +13,8 @@ use Modules\Leave\Mail\LeaveApprovalNotification;
 use Modules\Leave\Mail\LeaveRejectionNotification;
 use Illuminate\Support\Facades\Mail;
 
-<<<<<<< HEAD
-
-=======
 use Modules\Leave\Models\LeaveRequest;
 use Modules\Leave\Models\LeaveBalance;
->>>>>>> 34f31272c41e5b91d0242003286025ddc8ca58ef
 use Modules\Leave\Models\LeaveApproval;
 use Modules\Leave\Transformers\LeaveApprovalResource as LeaveApprovalResource;
 use Modules\RBAC\Transformers\User as UserResource;
@@ -171,20 +167,6 @@ class LeaveApprovalController extends Controller
         $leaveApproval = LeaveApproval::findOrFail($id);
         $leaveRequestId = $leaveApproval->leaverequest_id;
 
-<<<<<<< HEAD
-        $is_trashed = $leaveApproval->is_trashed;
-
-        if ($is_trashed == 1) {
-            $leaveApproval->delete(); // delete country
-        } else {
-            $leaveApproval->is_trashed = '1';
-            $leaveApproval->deleted_at = \Carbon\Carbon::now();
-            $leaveApproval->save();
-        }
-
-        return response()->json([
-            "message" => "LeaveApproval deleted"
-=======
         // Check if leave was approved or conditional approved
         if (in_array($leaveApproval->status, ['Approved', 'ConditionalApproved', 'ApprovedWithoutPay'])) {
             // Fetch the related LeaveRequest
@@ -225,7 +207,6 @@ class LeaveApprovalController extends Controller
 
         return response()->json([
             "message" => "LeaveApproval deleted, leave balance adjusted, and LeaveRequest status updated if necessary"
->>>>>>> 34f31272c41e5b91d0242003286025ddc8ca58ef
         ], 202);
     }
 

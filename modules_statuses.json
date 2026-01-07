@@ -3,5 +3,6 @@
     "Employee": true,
     "Organization": true,
     "Localization": true,
-    "Leave": true
+    "Leave": true,
+    "Dashboard": true
 }
