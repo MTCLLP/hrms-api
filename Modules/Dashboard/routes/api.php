@@ -17,8 +17,8 @@ use Modules\Dashboard\Http\Controllers\Api\DashboardController;
 Route::group(
 	[
 		'middleware' => ['auth:sanctum'],
-		'prefix' => 'manage/dashboards',
-		'namespace' => 'Api\Dashboard'
+		'prefix' => 'manage/dashboard',
+		'namespace' => 'Api'
     ],
     function(){
         Route::post('confirm-employee',[DashboardController::class,'confirmEmployee'])->name('api.dashboard.confirmEmployee');

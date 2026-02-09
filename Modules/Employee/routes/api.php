@@ -79,6 +79,7 @@ Route::group(
 		Route::get('/employee-dependants/restore/{id}', [EmployeeDependantsController::class, 'restore'])->name('api.employee-dependants.restore');
         Route::post('/employee-dependants', [EmployeeDependantsController::class, 'store'])->name('api.employee-dependants.store');
         Route::get('/employee-dependants/{employeeDependant}', [EmployeeDependantsController::class, 'show'])->name('api.employee-dependants.show');
+        Route::get('/employee-dependants-by-employee/{employee_id}', [EmployeeDependantsController::class, 'getEmployeeDependantsByEmployeeId'])->name('api.employee-dependants.by-employee');
         Route::patch('/employee-dependants/{employeeDependant}', [EmployeeDependantsController::class, 'update'])->name('api.employee-dependants.update');
 		Route::delete('/employee-dependants/{id}', [EmployeeDependantsController::class, 'destroy'])->name('api.employee-dependants.destroy');
         Route::post('/employee-dependants-delete-multiple', [EmployeeDependantsController::class, 'destroyMultiple'])->name('api.employee-dependants.destroy-multiple');

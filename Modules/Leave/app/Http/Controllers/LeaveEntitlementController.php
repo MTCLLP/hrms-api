@@ -24,26 +24,32 @@ class LeaveEntitlementController extends Controller
         $result = [];
 
         if ($user->hasRole('Administrator')) {
-            // Admin: fetch all leave entitlements
+            // Admin: fetch all leave entitlements ONLY for non-trashed employees
             $leaveEntitlements = LeaveEntitlement::with(['employee.user', 'leavetype'])
                 ->where('is_active', 1)
+                // Use whereHas to filter based on the related Employee model
+                ->whereHas('employee', function ($query) {
+                    $query->where('is_trashed', false);
+                })
                 ->get()
-                ->groupBy('employee_id'); // Group by employee ID
+                ->groupBy('employee_id');
 
             foreach ($leaveEntitlements as $employeeId => $entitlements) {
-                $firstEntitlement = $entitlements->first(); // Use the first record to get employee details
+                $firstEntitlement = $entitlements->first();
                 $employee = $firstEntitlement->employee;
 
-                // Prepare entitlement summary for each leave type
-                $leaveSummary = $this->formatEntitlements($entitlements, $leaveTypes);
+                // Extra safety check: ensures $employee exists before accessing properties
+                if ($employee && $employee->user) {
+                    $leaveSummary = $this->formatEntitlements($entitlements, $leaveTypes);
 
-                $result[] = [
-                    'employee' => [
-                        'id' => $employee->id,
-                        'name' => $employee->user->name, // Assuming 'name' exists in users table
-                    ],
-                    'leave_entitlements' => $leaveSummary,
-                ];
+                    $result[] = [
+                        'employee' => [
+                            'id' => $employee->id,
+                            'name' => $employee->user->name,
+                        ],
+                        'leave_entitlements' => $leaveSummary,
+                    ];
+                }
             }
         } else {
             // Employee: fetch entitlements for the logged-in employee

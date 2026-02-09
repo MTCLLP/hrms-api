@@ -78,6 +78,7 @@ class PasswordResetController extends Controller
         $validator = Validator::make($request->all(), [
             'email' => 'required|email',
             'password' => 'required|min:8',
+            'confirm_password' => 'required|same:password',
         ]);
 
 
