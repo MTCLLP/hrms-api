@@ -87,7 +87,7 @@ class EmployeeResource extends JsonResource
             'contacts' => $this->contacts,
             'addresses' => $this->addresses,
             'experience' => $this->experiences,
-            'dependants' => $this->dependants,
+            'dependants' => $this->dependants->where('is_trashed', false),
             'created_by' => $this->createdBy,
             'is_active' => $this->is_active,
             'is_trashed' => $this->is_trashed,

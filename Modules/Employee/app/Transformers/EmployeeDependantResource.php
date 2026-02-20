@@ -1,6 +1,6 @@
 <?php
 
-namespace Modules\HR\Transformers\Organization;
+namespace Modules\Employee\Transformers;
 
 use Illuminate\Http\Resources\Json\JsonResource;
 use Carbon\Carbon;
@@ -21,6 +21,7 @@ class EmployeeDependantResource extends JsonResource
             'employee_id' => $this->employee_id,
             'name' => $this->name,
             'email' => $this->email,
+            'number'=> $this->number,
             'relationship' => $this->relationship,
             'created_by' => $this->createdBy,
             'is_active' => $this->is_active,

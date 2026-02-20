@@ -37,6 +37,15 @@ class UserController extends Controller
 
     }
 
+    public function getUserByRole(Request $request, $roleName)
+    {
+        $users = QueryBuilder::for(User::class)
+            ->role($roleName)
+            ->get();
+
+        return UserResource::collection($users);
+    }
+
 
     /**
      * Store a newly created resource in storage.

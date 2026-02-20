@@ -125,7 +125,14 @@ class LeaveRequestController extends Controller
                 ->orderBy('created_at', 'desc')
                 ->paginate(10);
         } else {
-            $leaveRequests = LeaveRequest::whereRaw('0 = 1')->paginate(10); // Empty query
+            // $leaveRequests = LeaveRequest::whereRaw('0 = 1')->paginate(10); // Empty query
+            $employeeId = $user->employee->id;
+
+            $leaveRequests = LeaveRequest::where('is_trashed', false)
+                ->where('employee_id', $employeeId)
+                ->orderByRaw("CASE WHEN status = 'Pending' THEN 0 ELSE 1 END")
+                ->orderBy('created_at', 'desc')
+                ->paginate(10);
         }
 
         return LeaveRequestResource::collection($leaveRequests);
@@ -399,6 +406,19 @@ class LeaveRequestController extends Controller
                 'message' => 'Leave not found',
                 'errors' => ['Error' => ['Leave request not found.']]
             ], 404);
+        }
+
+        //If user does not have role of "Administrator" or "Superadmin", check if they are the superior
+        $user = auth()->user();
+        if (!$user->hasRole(['Administrator', 'Superadmin'])) {
+
+            if ($user->id !== $leave->supervised_by) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Unauthorized',
+                    'errors' => ['Error' => ['You are not authorized to reject this leave request.']]
+                ], 403);
+            }
         }
 
         $approver = auth()->user();

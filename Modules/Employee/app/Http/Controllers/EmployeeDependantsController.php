@@ -64,6 +64,16 @@ class EmployeeDependantsController extends Controller
         return new EmployeeDependantResource($employeeDependant);
     }
 
+    public function getEmployeeDependantsByEmployeeId($employee_id)
+    {
+        $employeeDependants = EmployeeDependant::where('employee_id', $employee_id)
+            ->where('is_trashed', false)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return EmployeeDependantResource::collection($employeeDependants);
+    }
+
 
     /**
      * Update the specified resource in storage.
@@ -73,13 +83,20 @@ class EmployeeDependantsController extends Controller
      */
     public function update(Request $request, EmployeeDependant $employeeDependant)
     {
+        $employee_id = $request->input('employee_id');
+        if($employeeDependant->employee_id != $employee_id){
+            return response()->json([
+                "message" => "Employee ID mismatch"
+            ], 400);
+        };
+
         $employeeDependant->employee_id = $request->input('employee_id');
         $employeeDependant->email = $request->input('email');
         $employeeDependant->name = $request->input('name');
         $employeeDependant->number = $request->input('number');
         $employeeDependant->relationship = $request->input('relationship');
-        $employeeDependant->is_active = $request->input('is_active');
-        $employeeDependant->is_trashed = $request->input('is_trashed');
+        $employeeDependant->is_active = 1;
+        $employeeDependant->is_trashed = 0;
 
         $employeeDependant->save();
 

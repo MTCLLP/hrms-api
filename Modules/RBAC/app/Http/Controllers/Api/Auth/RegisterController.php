@@ -49,7 +49,7 @@ class RegisterController extends Controller
                 'name' => $request->input('name'),
                 'email' => $request->input('email'),
                 'mobile' => $request->input('mobile'),
-                'password' => $request->input('password') //Mutator function inside User model will handle hash,
+                'password' => Hash::make($request->input('password')),
             ]);
 
             $user->assignRole('User');
