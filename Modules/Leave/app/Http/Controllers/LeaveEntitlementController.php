@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Modules\Leave\Models\LeaveEntitlement;
 use Modules\Leave\Models\LeaveType;
-use Modules\Leave\Transformers\LeaveEntitlementResource as LeaveEntitlementResource;
+use Modules\Leave\Transformers\LeaveEntitlementResource;
 
 class LeaveEntitlementController extends Controller
 {
@@ -49,7 +49,7 @@ class LeaveEntitlementController extends Controller
             // Employee: fetch entitlements for the logged-in employee
             $employee = $user->employee;
 
-            if (!$employee) {
+            if (! $employee) {
                 abort(403, 'Employee record not found');
             }
 
@@ -97,9 +97,9 @@ class LeaveEntitlementController extends Controller
         return $leaveSummary;
     }
 
-
     /**
      * Display a paginated listing of the resource.
+     *
      * @return Response
      */
     public function paginated()
@@ -116,7 +116,7 @@ class LeaveEntitlementController extends Controller
             // Employee: fetch leave entitlements for the specific employee
             $employee = $user->employee; // Get the employee record associated with the user
 
-            if (!$employee) {
+            if (! $employee) {
                 abort(403, 'Employee record not found');
             }
 
@@ -153,10 +153,9 @@ class LeaveEntitlementController extends Controller
         return response()->json($result);
     }
 
-
     /**
      * Store a newly created resource in storage.
-     * @param Request $request
+     *
      * @return Renderable
      */
     public function store(Request $request)
@@ -198,7 +197,6 @@ class LeaveEntitlementController extends Controller
         ], 201);
     }
 
-
     /**
      * Show the specified resource.
      */
@@ -232,29 +230,29 @@ class LeaveEntitlementController extends Controller
     {
         $leaveEntitlement = LeaveEntitlement::findOrFail($id);
 
-		$is_trashed = $leaveEntitlement->is_trashed;
+        $is_trashed = $leaveEntitlement->is_trashed;
 
-		if($is_trashed == 1) {
-			$leaveEntitlement->delete(); // delete country
-		}
-		else{
+        if ($is_trashed == 1) {
+            $leaveEntitlement->delete(); // delete country
+        } else {
             $leaveEntitlement->is_trashed = '1';
             $leaveEntitlement->deleted_at = \Carbon\Carbon::now();
             $leaveEntitlement->save();
         }
 
-		return response()->json([
-			"message" => "Leave Entitlement deleted"
-		], 202);
+        return response()->json([
+            'message' => 'Leave Entitlement deleted',
+        ], 202);
     }
 
     /**
      * Display a listing of the trashed items.
+     *
      * @return Response
      */
     public function trash()
     {
-        $leaveEntitlements = LeaveEntitlement::where('is_trashed',false)->get();
+        $leaveEntitlements = LeaveEntitlement::where('is_trashed', false)->get();
 
         return LeaveEntitlementResource::collection($leaveEntitlements);
     }
@@ -270,9 +268,9 @@ class LeaveEntitlementController extends Controller
         $leaveEntitlement->deleted_at = null;
         $leaveEntitlement->save();
 
-		return response()->json([
-			"message" => "Leave Entitlement restored successfully"
-		], 202);
+        return response()->json([
+            'message' => 'Leave Entitlement restored successfully',
+        ], 202);
     }
 
     /**
@@ -284,32 +282,26 @@ class LeaveEntitlementController extends Controller
      *
      *
 
-     * @param \Illuminate\Http\Request $request
      * @return \Illuminate\Http\JsonResponse
      */
     public function destroyMultiple(Request $request)
     {
         $ids = $request->ids; // Get the array of IDs from the request
 
-
         if (empty($ids)) {
             return response()->json([
-                "message" => "No department IDs provided"
+                'message' => 'No department IDs provided',
             ], 400);
         }
-
 
         // Get all companies that match the IDs provided
         $leaveEntitlements = LeaveEntitlement::whereIn('id', $ids)->get();
 
-
         $deletedPermanently = [];
         $softDeleted = [];
 
-
         foreach ($leaveEntitlements as $leaveEntitlement) {
             $is_trashed = $leaveEntitlement->is_trashed;
-
 
             if ($is_trashed == 1) {
                 // If already trashed, permanently delete
@@ -324,11 +316,10 @@ class LeaveEntitlementController extends Controller
             }
         }
 
-
         return response()->json([
-            "message" => "Leave Entitlement processed",
-            "deleted_permanently" => $deletedPermanently,
-            "soft_deleted" => $softDeleted,
+            'message' => 'Leave Entitlement processed',
+            'deleted_permanently' => $deletedPermanently,
+            'soft_deleted' => $softDeleted,
         ], 202);
     }
 }
