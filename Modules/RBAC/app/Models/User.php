@@ -53,12 +53,10 @@ class User extends Authenticatable
     public function setPasswordAttribute($password)
     {
         if (!empty($password)) {
-            // Only hash if not already hashed
-            if (!Hash::needsRehash($password)) {
-                $this->attributes['password'] = Hash::make($password);
-            } else {
-                $this->attributes['password'] = $password;
-            }
+            $this->attributes['password'] =
+                Hash::needsRehash($password)
+                ? Hash::make($password)
+                : $password;
         }
     }
     //Accessor function for full name
