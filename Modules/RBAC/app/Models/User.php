@@ -50,10 +50,17 @@ class User extends Authenticatable
     /**
      * Mutator function to encrypt all password fields
      */
-    public function setPasswordAttribute($password){
-        $this->attributes['password'] = Hash::make($password);
+    public function setPasswordAttribute($password)
+    {
+        if (!empty($password)) {
+            // Only hash if not already hashed
+            if (!Hash::needsRehash($password)) {
+                $this->attributes['password'] = Hash::make($password);
+            } else {
+                $this->attributes['password'] = $password;
+            }
+        }
     }
-
     //Accessor function for full name
     public function getFullNameAttribute()
     {
