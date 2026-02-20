@@ -190,7 +190,7 @@ class LoginController extends Controller
                     'errors' => ['Error' => ['Mobile not verified.']]
                 ], 401);
             } else {
-                $user->authentications;//Log user activities
+                //$user->authentications;//Log user activities
             // $user->assignRole('Manager');
             // $user->roles()->detach();
 
