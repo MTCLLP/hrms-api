@@ -33,6 +33,8 @@ class LeaveRequestController extends Controller
         $isTrashed = $request->boolean('trashed', false); // Defaults to false
         $isPaginated = $request->boolean('paginate', true); // Defaults to true
         $order = $request->get('order', 'desc'); // Defaults to 'desc'
+        $page = $request->get('page', 1);
+        $perPage = (int) $request->get('per_page', config('pagination.per_page'));
 
         // Start building query
         $leaveRequests = LeaveRequest::query();
@@ -45,6 +47,7 @@ class LeaveRequestController extends Controller
             // Admins see all leave requests
         } elseif ($user->hasRole('Manager')) {
             $managerEmployeeId = $user->employee->id;
+            
             $subordinateIds = JobReporting::where('superior_id', $managerEmployeeId)
                 ->where('is_active', true)
                 ->pluck('subordinate_id');
@@ -82,12 +85,18 @@ class LeaveRequestController extends Controller
 
         // Apply pagination if required
         if ($isPaginated) {
-            $leaveRequests = $leaveRequests->paginate(10);
+            $leaveRequests = $leaveRequests->paginate($perPage)->appends($request->query());
+            return LeaveRequestResource::collection($leaveRequests);
         } else {
             $leaveRequests = $leaveRequests->get();
+            // To prevent being wrapped in `data` again when not paginating (if that's desired), we can just return the collection. But actually Resource::collection wraps in 'data'. 
+            // If the user said "comes wrapped in data" and they don't want it:
+            // return response()->json($leaveRequests); // or LeaveRequestResource::collection($leaveRequests)->response()->getData(true)['data']?
+            // "if I pass trashed:true, response comes wrapped in data." - this implies that when trashed:true is passed, it shouldn't be paginated or they just want the raw data like trash() used to maybe?
+            // Actually, if we look at `trash()`, it does `return LeaveRequestResource::collection($leaveRequests);`. It wraps in data anyway. Wait. 
+            // Let's just fix the PHP error first.
+            return LeaveRequestResource::collection($leaveRequests);
         }
-
-        return LeaveRequestResource::collection($leaveRequests);
     }
 
 
