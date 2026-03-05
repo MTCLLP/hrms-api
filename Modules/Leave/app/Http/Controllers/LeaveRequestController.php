@@ -633,7 +633,6 @@ class LeaveRequestController extends Controller
      */
     public function update(Request $request, LeaveRequest $leaveRequest)
     {
-
         $employeeId = auth()->user()->employee->id;
 
         // Parse dates using Carbon
@@ -642,7 +641,9 @@ class LeaveRequestController extends Controller
 
         // Check for overlapping leave requests
         $overlap = LeaveRequest::where('employee_id', $employeeId)
+            ->where('id', '!=', $leaveRequest->id)
             ->where('is_active', 1) // Only active leaves
+            ->whereNot('status', 'Rejected')
             ->where(function ($query) use ($startDate, $endDate) {
                 $query->whereBetween('start_date', [$startDate, $endDate])
                     ->orWhereBetween('end_date', [$startDate, $endDate])
@@ -656,7 +657,6 @@ class LeaveRequestController extends Controller
         if ($overlap) {
             return response()->json(['message' => 'Leave request overlaps with an existing request.'], 422);
         }
-
 
         // Calculate the number of days (inclusive)
         $numberOfDays = (int)($startDate->diffInDays($endDate)) + 1;
