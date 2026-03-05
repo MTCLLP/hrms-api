@@ -672,7 +672,7 @@ class LeaveRequestController extends Controller
         } else {
 
             $leaveRequest->employee_id = $request->input('employee_id');
-            $leaveRequest->leavetype_id = $request->input('leavetype_id');
+            $leaveRequest->leavetype_id = $request->input('selectedLeaveType');
             $leaveRequest->start_date = $request->input('start_date');
             $leaveRequest->end_date = $request->input('end_date');
             $leaveRequest->status = $request->input('status');
