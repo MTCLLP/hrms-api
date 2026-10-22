@@ -4,5 +4,6 @@
     "Organization": true,
     "Localization": true,
     "Leave": true,
-    "Dashboard": true
+    "Dashboard": true,
+    "Asset": true
 }

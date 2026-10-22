@@ -17,8 +17,11 @@ use App\Scopes\CreatedByScope;
 class LeaveRequest extends Model
 {
     use BelongsToCalendarYear;
-    protected $fillable = ["employee_id","start_date","end_date","leavetype_id","is_half_day","leave_description","status","reason","comments","is_active", "is_trashed", "created_by"];
+    protected $fillable = ["employee_id","start_date","end_date","leavetype_id","is_half_day","leave_description","status","is_deducted","reason","comments","is_active", "is_trashed", "created_by"];
 
+    protected $casts = [
+        'is_deducted' => 'boolean',
+    ];
 
     public function employee()
     {

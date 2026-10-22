@@ -26,6 +26,7 @@ class LeaveRequestResource extends JsonResource
             'leaveBalance' => LeaveBalanceResource::collection($this->leaveBalance),
             'leaveApproval' => LeaveApprovalResource::collection($this->leaveApprovals->sortByDesc('created_at')),
             'status' => $this->status,
+            'is_deducted' => (bool)$this->is_deducted,
             'is_half_day' => $this->is_half_day ? 'Yes' : 'No',
             'leave_description' => $this->leave_description,
             'comments' => $this->comments,

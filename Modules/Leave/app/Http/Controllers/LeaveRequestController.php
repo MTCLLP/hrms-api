@@ -8,6 +8,8 @@ use Modules\Leave\Mail\NewLeaveRequestNotification;
 use Modules\Leave\Mail\LeaveApprovalNotification;
 use Modules\Leave\Mail\LeaveRejectionNotification;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 use Spatie\QueryBuilder\QueryBuilder;
 use Spatie\QueryBuilder\AllowedFilter;
 
@@ -89,12 +91,6 @@ class LeaveRequestController extends Controller
             return LeaveRequestResource::collection($leaveRequests);
         } else {
             $leaveRequests = $leaveRequests->get();
-            // To prevent being wrapped in `data` again when not paginating (if that's desired), we can just return the collection. But actually Resource::collection wraps in 'data'. 
-            // If the user said "comes wrapped in data" and they don't want it:
-            // return response()->json($leaveRequests); // or LeaveRequestResource::collection($leaveRequests)->response()->getData(true)['data']?
-            // "if I pass trashed:true, response comes wrapped in data." - this implies that when trashed:true is passed, it shouldn't be paginated or they just want the raw data like trash() used to maybe?
-            // Actually, if we look at `trash()`, it does `return LeaveRequestResource::collection($leaveRequests);`. It wraps in data anyway. Wait. 
-            // Let's just fix the PHP error first.
             return LeaveRequestResource::collection($leaveRequests);
         }
     }
@@ -134,7 +130,6 @@ class LeaveRequestController extends Controller
                 ->orderBy('created_at', 'desc')
                 ->paginate(10);
         } else {
-            // $leaveRequests = LeaveRequest::whereRaw('0 = 1')->paginate(10); // Empty query
             $employeeId = $user->employee->id;
 
             $leaveRequests = LeaveRequest::where('is_trashed', false)
@@ -163,14 +158,13 @@ class LeaveRequestController extends Controller
         $startDate = Carbon::parse($request->start_date);
         $endDate = Carbon::parse($request->end_date);
 
-         // Check if start_date or end_date falls on a weekend
+        // Check if start_date or end_date falls on a weekend
         if ($startDate->isWeekend() || $endDate->isWeekend()) {
             return response()->json([
                 'status' => false,
                 'message' => 'Leave cannot start or end on a weekend',
                 'errors' => ['Error' => ['Start date and end date cannot be a Saturday or Sunday.']]
             ], 400);
-
         }
 
         // Check for overlapping leave requests
@@ -195,10 +189,8 @@ class LeaveRequestController extends Controller
             ], 422);
         }
 
-
         // Calculate the number of days (inclusive)
         $isHalfDay = $request->input('is_half_day', false); // Defaults to false if not provided
-
 
         if ($isHalfDay) {
             if (!$startDate->equalTo($endDate)) {
@@ -213,52 +205,65 @@ class LeaveRequestController extends Controller
             $numberOfDays = (int)($startDate->diffInDays($endDate)) + 1;
         }
 
-        $getLeaveEntitlement = (int)LeaveEntitlement::where('employee_id',$employeeId)->where('leaveType_id',$request->input('selectedLeaveType'))->pluck('ent_amount')->first();
-
-        $getLeaveBalance = (int)LeaveBalance::where('employee_id',$employeeId)->where('leavetype_id',$request->input('selectedLeaveType'))->pluck('balance_amount')->first();
-
-        if($numberOfDays > 5){
+        if ($numberOfDays > 5) {
             return response()->json([
                 'status' => false,
                 'message' => 'Too many leaves',
                 'errors' => ['Error' => ['You can only take 5 days of leave at once!.']]
             ], 400);
         }
-        // elseif ($numberOfDays > $getLeaveEntitlement) {
-        //     return response()->json([
-        //         'status' => false,
-        //         'message' => 'Leave days exceed entitlement',
-        //         'errors' => ['Error' => ['Leave days exceed entitlement!.']]
-        //     ], 400);
-        // } elseif ($numberOfDays > $getLeaveBalance) {
-        //     return response()->json([
-        //         'status' => false,
-        //         'message' => 'Insufficient leave balance',
-        //         'errors' => ['Error' => ['Insufficient leave balance.']]
-        //     ], 400);
-        // }
-        else {
-            $leaveRequests = LeaveRequest::create([
+
+        $selectedLeaveTypeId = $request->input('selectedLeaveType');
+        $primaryLeaveBalance = LeaveBalance::where('employee_id', $employeeId)
+            ->where('leavetype_id', $selectedLeaveTypeId)
+            ->first();
+
+        if (!$primaryLeaveBalance || (float)$primaryLeaveBalance->balance_amount < (float)$numberOfDays) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Insufficient leave balance',
+                'errors' => ['Error' => ['Insufficient leave balance. You only have ' . ($primaryLeaveBalance ? $primaryLeaveBalance->balance_amount : 0) . ' day(s) available.']]
+            ], 400);
+        }
+
+        DB::beginTransaction();
+        try {
+            // Deduct leave balance upon applying
+            $primaryLeaveBalance->balance_amount = (float)$primaryLeaveBalance->balance_amount - (float)$numberOfDays;
+            $primaryLeaveBalance->save();
+
+            $leaveData = [
                 'employee_id' => $employeeId,
                 'start_date' => $request->input('start_date'),
                 'end_date' => $request->input('end_date'),
-                'leavetype_id' => $request->input('selectedLeaveType'),
-                'is_half_day' => $request->input('is_half_day'),
+                'leavetype_id' => $selectedLeaveTypeId,
+                'is_half_day' => $isHalfDay,
                 'leave_description' => $request->input('leave_description'),
                 'reason' => $request->input('reason'),
-                // 'status' => $request->input('status'),
-                // 'comments' => $request->input('comments'),
                 'created_by' => auth()->user()->id,
                 'is_active' => 1,
                 'is_trashed' => 0,
+            ];
 
-            ]);
-            if (!(auth()->user()->id == 21 || auth()->user()->id == 22)) {
-                // Notify all superiors
-                $superiors = $employee->superiors; // Get the superiors collection from the relationship
+            if (Schema::hasColumn('leave_requests', 'is_deducted')) {
+                $leaveData['is_deducted'] = true;
+            }
 
+            $leaveRequests = LeaveRequest::create($leaveData);
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw $e;
+        }
+
+        if (!(auth()->user()->id == 21 || auth()->user()->id == 22)) {
+            // Notify all superiors
+            $superiors = $employee->superiors;
+
+            if ($superiors) {
                 foreach ($superiors as $superior) {
-                    $superiorDetails = $superior->superiorDetails; // Fetch superior details using the relationship
+                    $superiorDetails = $superior->superiorDetails;
 
                     if ($superiorDetails && $superiorDetails->user && $superiorDetails->user->email) {
                         Mail::to($superiorDetails->user->email)
@@ -266,19 +271,18 @@ class LeaveRequestController extends Controller
                     }
                 }
             }
-
-            return new LeaveRequestResource($leaveRequests);
         }
+
+        return new LeaveRequestResource($leaveRequests);
     }
 
     /**
-     * Store a newly created resource in storage.
+     * Approve leave request.
      * @param Request $request
      * @return Renderable
      */
     public function approveLeave(Request $request)
     {
-
         $leaveId = $request->input('leave_request_id');
         $action = $request->input('action');
         $leave = LeaveRequest::find($leaveId);
@@ -299,65 +303,32 @@ class LeaveRequestController extends Controller
         // Determine if the leave is paid or unpaid
         $isPaidLeave = ($action !== 'ApprovedWithoutPay');
 
-        if ($isPaidLeave) {
-            $remainingDays = $numberOfDays;
-            $deductedLeaveTypes = [];
+        $primaryLeaveBalance = LeaveBalance::where('employee_id', $leave->employee_id)
+            ->where('leavetype_id', $leave->leavetype_id)
+            ->first();
 
-            // Check if requested leave type has sufficient balance
-            $primaryLeaveBalance = LeaveBalance::where('employee_id', $leave->employee_id)
-                ->where('leavetype_id', $leave->leavetype_id)
-                ->first();
+        $hasIsDeducted = Schema::hasColumn('leave_requests', 'is_deducted');
+        $wasDeducted = $hasIsDeducted ? $leave->is_deducted : true;
 
-            if ($primaryLeaveBalance && $primaryLeaveBalance->balance_amount >= $remainingDays) {
-                // Deduct from the requested leave type directly
-                $primaryLeaveBalance->balance_amount -= $remainingDays;
+        if (!$isPaidLeave) {
+            // Approved without pay: if it was deducted when applied, restore it back
+            if ($wasDeducted && $primaryLeaveBalance) {
+                $primaryLeaveBalance->balance_amount = (float)$primaryLeaveBalance->balance_amount + (float)$numberOfDays;
                 $primaryLeaveBalance->save();
-                $deductedLeaveTypes[] = [
-                    'leave_type' => $leave->leaveType->type_name,
-                    'days_deducted' => $remainingDays,
-                ];
-                $remainingDays = 0;
-            } else {
-                // If insufficient balance, try other leave types in priority order
-                $leaveTypesOrder = ['Earned', 'Casual', 'Restricted', 'Sick'];
-
-                foreach ($leaveTypesOrder as $leaveTypeName) {
-                    if ($remainingDays <= 0) {
-                        break;
-                    }
-
-                    $leaveBalance = LeaveBalance::where('employee_id', $leave->employee_id)
-                        ->whereHas('leaveType', function ($query) use ($leaveTypeName) {
-                            $query->where('type_name', $leaveTypeName);
-                        })
-                        ->first();
-
-                    if ($leaveBalance && $leaveBalance->balance_amount > 0) {
-                        $deductibleDays = min($leaveBalance->balance_amount, $remainingDays);
-                        $leaveBalance->balance_amount -= $deductibleDays;
-                        $leaveBalance->save();
-
-                        $deductedLeaveTypes[] = [
-                            'leave_type' => $leaveTypeName,
-                            'days_deducted' => $deductibleDays,
-                        ];
-
-                        $remainingDays -= $deductibleDays;
-                    }
+            }
+            if ($hasIsDeducted) {
+                $leave->is_deducted = false;
+            }
+        } else {
+            // If it was not yet deducted (e.g. legacy pending leave created prior to this logic)
+            if ($hasIsDeducted && !$leave->is_deducted) {
+                if ($primaryLeaveBalance && (float)$primaryLeaveBalance->balance_amount >= (float)$numberOfDays) {
+                    $primaryLeaveBalance->balance_amount = (float)$primaryLeaveBalance->balance_amount - (float)$numberOfDays;
+                    $primaryLeaveBalance->save();
                 }
+                $leave->is_deducted = true;
             }
-
-            // If leave balance is still insufficient
-            if ($remainingDays > 0) {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Insufficient balance',
-                    'errors' => ['Error' => ['Insufficient leave balance.']]
-                ], 400);
-            }
-
-            // Log deducted leave details (optional)
-            \Log::info('Leave deducted:', $deductedLeaveTypes);
+            // For leaves already deducted at apply time: do not update/deduct the count again
         }
 
         // Set leave status based on approval type
@@ -372,10 +343,8 @@ class LeaveRequestController extends Controller
                 $leave->status = 'PartialApprove';
                 break;
             case 'Approved':
-                $leave->status = 'Approved';
-                break;
             default:
-                // Handle default case if necessary
+                $leave->status = 'Approved';
                 break;
         }
 
@@ -385,7 +354,7 @@ class LeaveRequestController extends Controller
         // Create approval record
         LeaveApproval::create([
             'leaverequest_id' => $leave->id,
-            'approver_id' => auth()->user()->employee->id,
+            'approver_id' => auth()->user()->employee ? auth()->user()->employee->id : null,
             'start_date' => $leave->start_date,
             'end_date' => $leave->end_date,
             'total_days' => $numberOfDays,
@@ -395,8 +364,10 @@ class LeaveRequestController extends Controller
         ]);
 
         // Send notification
-        Mail::to($leave->employee->user->email)
-            ->send(new LeaveApprovalNotification($leave, $approver));
+        if ($leave->employee && $leave->employee->user && $leave->employee->user->email) {
+            Mail::to($leave->employee->user->email)
+                ->send(new LeaveApprovalNotification($leave, $approver));
+        }
 
         return response()->json(['message' => 'Leave request approved successfully.'], 200);
     }
@@ -417,10 +388,9 @@ class LeaveRequestController extends Controller
             ], 404);
         }
 
-        //If user does not have role of "Administrator" or "Superadmin", check if they are the superior
+        // If user does not have role of "Administrator" or "Superadmin", check if they are the superior
         $user = auth()->user();
         if (!$user->hasRole(['Administrator', 'Superadmin'])) {
-
             if ($user->id !== $leave->supervised_by) {
                 return response()->json([
                     'status' => false,
@@ -432,52 +402,27 @@ class LeaveRequestController extends Controller
 
         $approver = auth()->user();
 
-        // If the leave was previously approved, reverse the leave balance adjustments
-        if ($leave->status === 'Approved' || $leave->status === 'PartialApproved') {
-            // Get the associated leave approvals for the leave request
-            $leaveApprovals = LeaveApproval::where('leaverequest_id', $leave->id)
-                ->whereIn('status', ['Approved', 'PartialApproved'])
-                ->get();
+        // Revert back the available count if leave was deducted and not already rejected or without pay
+        if ($leave->status !== 'Rejected' && $leave->status !== 'ApprovedWithoutPay') {
+            $hasIsDeducted = Schema::hasColumn('leave_requests', 'is_deducted');
+            $wasDeducted = $hasIsDeducted ? $leave->is_deducted : true;
 
-            foreach ($leaveApprovals as $approval) {
-                $startDate = Carbon::parse($approval->start_date);
-                $endDate = Carbon::parse($approval->end_date);
-                $numberOfDays = $approval->total_days;
-                $leaveTypeId = $leave->leavetype_id; // Assuming the leave type for the request is the same
+            if ($wasDeducted) {
+                $startDate = Carbon::parse($leave->start_date);
+                $endDate = Carbon::parse($leave->end_date);
+                $numberOfDays = $leave->is_half_day ? 0.5 : ($startDate->diffInDays($endDate)) + 1;
 
-                // Find the corresponding leave balance
-                $leaveBalance = LeaveBalance::where('employee_id', $leave->employee_id)
-                    ->where('leavetype_id', $leaveTypeId)
+                $primaryLeaveBalance = LeaveBalance::where('employee_id', $leave->employee_id)
+                    ->where('leavetype_id', $leave->leavetype_id)
                     ->first();
 
-                if ($leaveBalance) {
-                    // Restore the deducted leave balance
-                    $leaveBalance->balance_amount += $numberOfDays;
-                    $leaveBalance->save();
+                if ($primaryLeaveBalance) {
+                    $primaryLeaveBalance->balance_amount = (float)$primaryLeaveBalance->balance_amount + (float)$numberOfDays;
+                    $primaryLeaveBalance->save();
                 }
 
-                // Optionally, if partial approval, adjust the other leave types similarly
-                if ($approval->status === 'PartialApproved') {
-                    // Handle partial leave type deductions (if applicable)
-                    $partialLeaveTypes = json_decode($approval->remarks, true); // assuming partial leave types are stored in remarks
-
-                    foreach ($partialLeaveTypes as $leaveTypeData) {
-                        $leaveTypeName = $leaveTypeData['leave_type'];
-                        $daysDeducted = $leaveTypeData['days_deducted'];
-
-                        // Find the corresponding leave balance
-                        $partialLeaveBalance = LeaveBalance::where('employee_id', $leave->employee_id)
-                            ->whereHas('leaveType', function ($query) use ($leaveTypeName) {
-                                $query->where('type_name', $leaveTypeName);
-                            })
-                            ->first();
-
-                        if ($partialLeaveBalance) {
-                            // Restore the deducted partial leave balance
-                            $partialLeaveBalance->balance_amount += $daysDeducted;
-                            $partialLeaveBalance->save();
-                        }
-                    }
+                if ($hasIsDeducted) {
+                    $leave->is_deducted = false;
                 }
             }
         }
@@ -490,7 +435,7 @@ class LeaveRequestController extends Controller
         // Store the rejection in the leave_approvals table
         LeaveApproval::create([
             'leaverequest_id' => $leave->id,
-            'approver_id' => auth()->user()->employee->id,
+            'approver_id' => auth()->user()->employee ? auth()->user()->employee->id : null,
             'start_date' => $leave->start_date,
             'end_date' => $leave->end_date,
             'total_days' => 0, // No days deducted for rejection
@@ -500,8 +445,10 @@ class LeaveRequestController extends Controller
         ]);
 
         // Notify the employee
-        Mail::to($leave->employee->user->email)
-            ->send(new LeaveRejectionNotification($leave, $approver));
+        if ($leave->employee && $leave->employee->user && $leave->employee->user->email) {
+            Mail::to($leave->employee->user->email)
+                ->send(new LeaveRejectionNotification($leave, $approver));
+        }
 
         return response()->json(['message' => 'Leave request rejected successfully.'], 200);
     }
@@ -530,8 +477,11 @@ class LeaveRequestController extends Controller
                 'message' => 'Data not provided',
                 'errors' => ['Error' => ['No partial approval data provided.']]
             ], 400);
-
         }
+
+        $primaryLeaveBalance = LeaveBalance::where('employee_id', $leave->employee_id)
+            ->where('leavetype_id', $leave->leavetype_id)
+            ->first();
 
         foreach ($partialApprovals as $approval) {
             $startDate = Carbon::parse($approval['start_date']);
@@ -542,79 +492,16 @@ class LeaveRequestController extends Controller
             // Determine if it's a paid leave
             $isPaidLeave = ($status !== 'ApprovedWithoutPay' && $status !== 'Rejected');
 
-            if ($isPaidLeave) {
-                $remainingDays = $numberOfDays;
-                $deductedLeaveTypes = [];
-
-                // Check if requested leave type has sufficient balance
-                $primaryLeaveBalance = LeaveBalance::where('employee_id', $leave->employee_id)
-                    ->where('leavetype_id', $leave->leavetype_id)
-                    ->first();
-
-                if ($primaryLeaveBalance && $primaryLeaveBalance->balance_amount >= $remainingDays) {
-                    // Deduct from the applied leave type
-                    $primaryLeaveBalance->balance_amount -= $remainingDays;
-                    $primaryLeaveBalance->save();
-                    $deductedLeaveTypes[] = [
-                        'leave_type' => $leave->leaveType->type_name,
-                        'days_deducted' => $remainingDays,
-                    ];
-                    $remainingDays = 0;
-                } else {
-                    // If insufficient balance, try other leave types
-                    $leaveTypesOrder = ['Earned Leave', 'Casual Leave', 'Restricted Holiday', 'Sick Leave'];
-
-                    foreach ($leaveTypesOrder as $leaveTypeName) {
-                        if ($remainingDays <= 0) {
-                            break;
-                        }
-
-                        $leaveBalance = LeaveBalance::where('employee_id', $leave->employee_id)
-                            ->whereHas('leaveType', function ($query) use ($leaveTypeName) {
-                                $query->where('type_name', $leaveTypeName);
-                            })
-                            ->first();
-
-                        if ($leaveBalance && $leaveBalance->balance_amount > 0) {
-                            $deductibleDays = min($leaveBalance->balance_amount, $remainingDays);
-                            $leaveBalance->balance_amount -= $deductibleDays;
-                            $leaveBalance->save();
-
-                            $deductedLeaveTypes[] = [
-                                'leave_type' => $leaveTypeName,
-                                'days_deducted' => $deductibleDays,
-                            ];
-
-                            $remainingDays -= $deductibleDays;
-                        }
-                    }
-                }
-
-                // If leave balance is still insufficient, reject this approval
-                if ($remainingDays > 0) {
-                    return response()->json([
-                        'status' => false,
-                        'message' => 'Insufficient leave balance',
-                        'errors' => ['Error' => ['Insufficient leave balance for partial approval.']]
-                    ], 400);
-
-                }
-
-                // Log deducted leave details (optional)
-                \Log::info('Partial Leave deducted:', $deductedLeaveTypes);
+            // If not paid (rejected or without pay), revert those days back to balance
+            if (!$isPaidLeave && $primaryLeaveBalance) {
+                $primaryLeaveBalance->balance_amount = (float)$primaryLeaveBalance->balance_amount + (float)$numberOfDays;
+                $primaryLeaveBalance->save();
             }
-
-            // Update leave status
-
-            $leave->status = 'Partially Approved';
-
-            $leave->supervised_by = auth()->user()->id;
-            $leave->save();
 
             // Create approval record
             LeaveApproval::create([
                 'leaverequest_id' => $leave->id,
-                'approver_id' => auth()->user()->employee->id,
+                'approver_id' => auth()->user()->employee ? auth()->user()->employee->id : null,
                 'start_date' => $startDate,
                 'end_date' => $endDate,
                 'total_days' => $numberOfDays,
@@ -623,6 +510,10 @@ class LeaveRequestController extends Controller
                 'remarks' => $request->input('comment'),
             ]);
         }
+
+        $leave->status = 'Partially Approved';
+        $leave->supervised_by = auth()->user()->id;
+        $leave->save();
 
         return response()->json(['message' => 'Leave request partially approved successfully.'], 200);
     }
@@ -667,32 +558,63 @@ class LeaveRequestController extends Controller
             return response()->json(['message' => 'Leave request overlaps with an existing request.'], 422);
         }
 
-        // Calculate the number of days (inclusive)
-        $numberOfDays = (int)($startDate->diffInDays($endDate)) + 1;
+        $isHalfDay = $request->input('is_half_day', false);
+        $newNumberOfDays = $isHalfDay ? 0.5 : (int)($startDate->diffInDays($endDate)) + 1;
+        $newLeaveTypeId = $request->input('selectedLeaveType');
 
-        $getLeaveEntitlement = (int)LeaveEntitlement::where('employee_id',$employeeId)->where('leaveType_id',$request->input('selectedLeaveType'))->pluck('ent_amount')->first();
-
-        $getLeaveBalance = (int)LeaveBalance::where('employee_id',$employeeId)->where('leavetype_id',$request->input('selectedLeaveType'))->pluck('balance_amount')->first();
-
-        if ($numberOfDays > $getLeaveEntitlement) {
-            return response()->json(['error' => 'Leave days exceed entitlement!'], 400);
-        } elseif ($numberOfDays > $getLeaveBalance) {
-            return response()->json(['error' => 'Insufficient leave balance!'], 400);
-        } else {
-
-            $leaveRequest->employee_id = $request->input('employee_id');
-            $leaveRequest->leavetype_id = $request->input('selectedLeaveType');
-            $leaveRequest->start_date = $request->input('start_date');
-            $leaveRequest->end_date = $request->input('end_date');
-            $leaveRequest->status = $request->input('status');
-            $leaveRequest->comments = $request->input('comments');
-            $leaveRequest->leave_description = $request->input('leave_description');
-            $leaveRequest->reason = $request->input('reason');
-            $leaveRequest->is_active = $request->input('is_active');
-            $leaveRequest->is_trashed = $request->input('is_trashed');
-            $leaveRequest->created_by = auth()->user()->id;
-            $leaveRequest->save();
+        if ($newNumberOfDays > 5) {
+            return response()->json(['error' => 'You can only take 5 days of leave at once!.'], 400);
         }
+
+        // Adjust balance if updating a pending leave request that was deducted
+        if ($leaveRequest->status === 'Pending') {
+            $oldStartDate = Carbon::parse($leaveRequest->start_date);
+            $oldEndDate = Carbon::parse($leaveRequest->end_date);
+            $oldNumberOfDays = $leaveRequest->is_half_day ? 0.5 : (int)($oldStartDate->diffInDays($oldEndDate)) + 1;
+            $oldLeaveTypeId = $leaveRequest->leavetype_id;
+
+            $hasIsDeducted = Schema::hasColumn('leave_requests', 'is_deducted');
+            $wasDeducted = $hasIsDeducted ? $leaveRequest->is_deducted : true;
+
+            if ($wasDeducted) {
+                // Temporarily revert old balance
+                $oldBalance = LeaveBalance::where('employee_id', $employeeId)
+                    ->where('leavetype_id', $oldLeaveTypeId)
+                    ->first();
+                if ($oldBalance) {
+                    $oldBalance->balance_amount = (float)$oldBalance->balance_amount + (float)$oldNumberOfDays;
+                    $oldBalance->save();
+                }
+
+                // Check if new leave type has sufficient balance
+                $newBalance = LeaveBalance::where('employee_id', $employeeId)
+                    ->where('leavetype_id', $newLeaveTypeId)
+                    ->first();
+
+                if (!$newBalance || (float)$newBalance->balance_amount < (float)$newNumberOfDays) {
+                    // Revert old deduction back before returning error
+                    if ($oldBalance) {
+                        $oldBalance->balance_amount = (float)$oldBalance->balance_amount - (float)$oldNumberOfDays;
+                        $oldBalance->save();
+                    }
+                    return response()->json(['error' => 'Insufficient leave balance!'], 400);
+                }
+
+                // Deduct new days
+                $newBalance->balance_amount = (float)$newBalance->balance_amount - (float)$newNumberOfDays;
+                $newBalance->save();
+            }
+        }
+
+        $leaveRequest->employee_id = $employeeId;
+        $leaveRequest->leavetype_id = $newLeaveTypeId;
+        $leaveRequest->start_date = $request->input('start_date');
+        $leaveRequest->end_date = $request->input('end_date');
+        $leaveRequest->is_half_day = $isHalfDay;
+        $leaveRequest->leave_description = $request->input('leave_description');
+        $leaveRequest->reason = $request->input('reason');
+        $leaveRequest->save();
+
         return new LeaveRequestResource($leaveRequest);
     }
 
@@ -703,20 +625,44 @@ class LeaveRequestController extends Controller
     {
         $leaveRequest = LeaveRequest::findOrFail($id);
 
-		$is_trashed = $leaveRequest->is_trashed;
+        $is_trashed = $leaveRequest->is_trashed;
 
-		if($is_trashed == 1) {
-			$leaveRequest->delete(); // delete country
-		}
-		else{
+        if ($is_trashed == 1) {
+            $leaveRequest->delete();
+        } else {
+            // Revert deducted balance when trashing if active and not rejected/unpaid
+            if (!in_array($leaveRequest->status, ['Rejected', 'ApprovedWithoutPay'])) {
+                $hasIsDeducted = Schema::hasColumn('leave_requests', 'is_deducted');
+                $wasDeducted = $hasIsDeducted ? $leaveRequest->is_deducted : true;
+
+                if ($wasDeducted) {
+                    $startDate = Carbon::parse($leaveRequest->start_date);
+                    $endDate = Carbon::parse($leaveRequest->end_date);
+                    $numberOfDays = $leaveRequest->is_half_day ? 0.5 : ($startDate->diffInDays($endDate)) + 1;
+
+                    $leaveBalance = LeaveBalance::where('employee_id', $leaveRequest->employee_id)
+                        ->where('leavetype_id', $leaveRequest->leavetype_id)
+                        ->first();
+
+                    if ($leaveBalance) {
+                        $leaveBalance->balance_amount = (float)$leaveBalance->balance_amount + (float)$numberOfDays;
+                        $leaveBalance->save();
+                    }
+
+                    if ($hasIsDeducted) {
+                        $leaveRequest->is_deducted = false;
+                    }
+                }
+            }
+
             $leaveRequest->is_trashed = '1';
             $leaveRequest->deleted_at = \Carbon\Carbon::now();
             $leaveRequest->save();
         }
 
-		return response()->json([
-			"message" => "Leave Request deleted"
-		], 202);
+        return response()->json([
+            "message" => "Leave Request deleted"
+        ], 202);
     }
 
     /**
@@ -725,7 +671,7 @@ class LeaveRequestController extends Controller
      */
     public function trash()
     {
-        $leaveRequests = LeaveRequest::where('is_trashed',true)->get();
+        $leaveRequests = LeaveRequest::where('is_trashed', true)->get();
 
         return LeaveRequestResource::collection($leaveRequests);
     }
@@ -737,31 +683,49 @@ class LeaveRequestController extends Controller
     {
         $leaveRequest = LeaveRequest::findOrFail($id);
 
+        // When restoring from trash, re-deduct if status was active
+        if (!in_array($leaveRequest->status, ['Rejected', 'ApprovedWithoutPay'])) {
+            $hasIsDeducted = Schema::hasColumn('leave_requests', 'is_deducted');
+            $wasDeducted = $hasIsDeducted ? $leaveRequest->is_deducted : false;
+
+            if (!$wasDeducted) {
+                $startDate = Carbon::parse($leaveRequest->start_date);
+                $endDate = Carbon::parse($leaveRequest->end_date);
+                $numberOfDays = $leaveRequest->is_half_day ? 0.5 : ($startDate->diffInDays($endDate)) + 1;
+
+                $leaveBalance = LeaveBalance::where('employee_id', $leaveRequest->employee_id)
+                    ->where('leavetype_id', $leaveRequest->leavetype_id)
+                    ->first();
+
+                if ($leaveBalance) {
+                    $leaveBalance->balance_amount = (float)$leaveBalance->balance_amount - (float)$numberOfDays;
+                    $leaveBalance->save();
+                }
+
+                if ($hasIsDeducted) {
+                    $leaveRequest->is_deducted = true;
+                }
+            }
+        }
+
         $leaveRequest->is_trashed = '0';
         $leaveRequest->deleted_at = null;
         $leaveRequest->save();
 
-		return response()->json([
-			"message" => "Leave Request restored successfully"
-		], 202);
+        return response()->json([
+            "message" => "Leave Request restored successfully"
+        ], 202);
     }
 
     /**
      * Remove multiple specified resources from storage.
      *
-     * This method is used to delete multiple records from the database.
-     * If the record is already marked as trashed (`is_trashed` == 1), it will be permanently deleted.
-     * Otherwise, it will be soft deleted by setting the `is_trashed` flag to 1 and updating the `deleted_at` timestamp.
-     *
-     *
-
      * @param \Illuminate\Http\Request $request
      * @return \Illuminate\Http\JsonResponse
      */
     public function destroyMultiple(Request $request)
     {
-        $ids = $request->ids; // Get the array of IDs from the request
-
+        $ids = $request->ids;
 
         if (empty($ids)) {
             return response()->json([
@@ -769,31 +733,48 @@ class LeaveRequestController extends Controller
             ], 400);
         }
 
-
-        // Get all companies that match the IDs provided
         $leaveRequests = LeaveRequest::whereIn('id', $ids)->get();
-
 
         $deletedPermanently = [];
         $softDeleted = [];
-
 
         foreach ($leaveRequests as $leaveRequest) {
             $is_trashed = $leaveRequest->is_trashed;
 
             if ($is_trashed == 1) {
-                // If already trashed, permanently delete
                 $leaveRequest->delete();
                 $deletedPermanently[] = $leaveRequest->id;
             } else {
-                // Otherwise, soft delete by setting is_trashed to 1
+                if (!in_array($leaveRequest->status, ['Rejected', 'ApprovedWithoutPay'])) {
+                    $hasIsDeducted = Schema::hasColumn('leave_requests', 'is_deducted');
+                    $wasDeducted = $hasIsDeducted ? $leaveRequest->is_deducted : true;
+
+                    if ($wasDeducted) {
+                        $startDate = Carbon::parse($leaveRequest->start_date);
+                        $endDate = Carbon::parse($leaveRequest->end_date);
+                        $numberOfDays = $leaveRequest->is_half_day ? 0.5 : ($startDate->diffInDays($endDate)) + 1;
+
+                        $leaveBalance = LeaveBalance::where('employee_id', $leaveRequest->employee_id)
+                            ->where('leavetype_id', $leaveRequest->leavetype_id)
+                            ->first();
+
+                        if ($leaveBalance) {
+                            $leaveBalance->balance_amount = (float)$leaveBalance->balance_amount + (float)$numberOfDays;
+                            $leaveBalance->save();
+                        }
+
+                        if ($hasIsDeducted) {
+                            $leaveRequest->is_deducted = false;
+                        }
+                    }
+                }
+
                 $leaveRequest->is_trashed = '1';
                 $leaveRequest->deleted_at = \Carbon\Carbon::now();
                 $leaveRequest->save();
                 $softDeleted[] = $leaveRequest->id;
             }
         }
-
 
         return response()->json([
             "message" => "Leave Request processed",

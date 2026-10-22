@@ -104,6 +104,37 @@ class LeaveRequestControllerTest extends TestCase
             'employee_id' => $this->employee->id,
             'reason' => 'Vacation',
         ]);
+
+        // Balance should be deducted upon applying (10 - 2 = 8)
+        $this->assertDatabaseHas('leave_balances', [
+            'employee_id' => $this->employee->id,
+            'leavetype_id' => $this->leaveType->id,
+            'balance_amount' => 8,
+        ]);
+    }
+
+    public function test_store_leave_request_insufficient_balance()
+    {
+        Sanctum::actingAs($this->user);
+
+        // Update balance to only 1 day
+        LeaveBalance::where('employee_id', $this->employee->id)
+            ->where('leavetype_id', $this->leaveType->id)
+            ->update(['balance_amount' => 1]);
+
+        $response = $this->postJson(route('api.leave-request.store'), [
+            'start_date' => Carbon::now()->next('Monday')->format('Y-m-d'),
+            'end_date' => Carbon::now()->next('Tuesday')->format('Y-m-d'), // 2 days
+            'selectedLeaveType' => $this->leaveType->id,
+            'reason' => 'Vacation',
+            'leave_description' => 'Going to beach',
+        ]);
+
+        $response->assertStatus(400);
+        $response->assertJson([
+            'status' => false,
+            'message' => 'Insufficient leave balance',
+        ]);
     }
 
     public function test_store_leave_request_overlap()
@@ -146,12 +177,18 @@ class LeaveRequestControllerTest extends TestCase
 
         Sanctum::actingAs($adminUser);
 
+        // Balance was deducted upon application from 10 to 8
+        LeaveBalance::where('employee_id', $this->employee->id)
+            ->where('leavetype_id', $this->leaveType->id)
+            ->update(['balance_amount' => 8]);
+
         $leave = LeaveRequest::create([
             'employee_id' => $this->employee->id,
             'leavetype_id' => $this->leaveType->id,
             'start_date' => Carbon::now()->next('Monday'),
             'end_date' => Carbon::now()->next('Tuesday'),
             'status' => 'Pending',
+            'is_deducted' => 1,
             'is_active' => 1,
             'is_trashed' => 0,
         ]);
@@ -165,11 +202,11 @@ class LeaveRequestControllerTest extends TestCase
         $response->assertStatus(200);
         $this->assertEquals('Approved', $leave->fresh()->status);
 
-        // Check balance deduction (2 days)
+        // When approved, count is NOT deducted again (remains 8)
         $this->assertDatabaseHas('leave_balances', [
             'employee_id' => $this->employee->id,
             'leavetype_id' => $this->leaveType->id,
-            'balance_amount' => 8, // 10 - 2
+            'balance_amount' => 8,
         ]);
     }
 
@@ -186,12 +223,18 @@ class LeaveRequestControllerTest extends TestCase
 
         Sanctum::actingAs($adminUser);
 
+        // Balance was deducted upon application from 10 to 8
+        LeaveBalance::where('employee_id', $this->employee->id)
+            ->where('leavetype_id', $this->leaveType->id)
+            ->update(['balance_amount' => 8]);
+
         $leave = LeaveRequest::create([
             'employee_id' => $this->employee->id,
             'leavetype_id' => $this->leaveType->id,
             'start_date' => Carbon::now()->next('Monday'),
             'end_date' => Carbon::now()->next('Tuesday'),
             'status' => 'Pending',
+            'is_deducted' => 1,
             'is_active' => 1,
             'is_trashed' => 0,
         ]);
@@ -203,6 +246,13 @@ class LeaveRequestControllerTest extends TestCase
 
         $response->assertStatus(200);
         $this->assertEquals('Rejected', $leave->fresh()->status);
+
+        // When rejected, balance is reverted back from 8 to 10
+        $this->assertDatabaseHas('leave_balances', [
+            'employee_id' => $this->employee->id,
+            'leavetype_id' => $this->leaveType->id,
+            'balance_amount' => 10,
+        ]);
     }
 
     public function test_destroy_leave_request()
