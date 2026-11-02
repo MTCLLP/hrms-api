@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Modules\Leave\Models\LeaveEntitlement;
 use Modules\Leave\Models\LeaveType;
 use Modules\Leave\Transformers\LeaveEntitlementResource;
+use Illuminate\Support\Facades\Schema;
 
 class LeaveEntitlementController extends Controller
 {
@@ -23,13 +24,20 @@ class LeaveEntitlementController extends Controller
         // Result container
         $result = [];
 
-        if ($user->hasRole('Administrator')) {
-            // Admin: fetch all leave entitlements ONLY for non-trashed employees
+        if ($user->hasRole(['Administrator', 'Superadmin'])) {
+            // Admin: fetch all leave entitlements ONLY for active, non-trashed employees with active users
             $leaveEntitlements = LeaveEntitlement::with(['employee.user', 'leavetype'])
                 ->where('is_active', 1)
-                // Use whereHas to filter based on the related Employee model
                 ->whereHas('employee', function ($query) {
-                    $query->where('is_trashed', false);
+                    $query->where('is_trashed', false)
+                          ->where('is_active', true);
+                    if (Schema::hasColumn('users', 'is_active')) {
+                        $query->whereHas('user', function ($uq) {
+                            $uq->where('is_active', true);
+                        });
+                    } else {
+                        $query->whereHas('user');
+                    }
                 })
                 ->get()
                 ->groupBy('employee_id');
@@ -112,10 +120,21 @@ class LeaveEntitlementController extends Controller
     {
         $user = auth()->user(); // Get the authenticated user
 
-        if ($user->hasRole('Administrator')) {
-            // Admin: fetch all leave entitlements
+        if ($user->hasRole(['Administrator', 'Superadmin'])) {
+            // Admin: fetch all leave entitlements for active employees with active users
             $leaveEntitlements = LeaveEntitlement::with(['employee.user'])
                 ->where('is_active', 1)
+                ->whereHas('employee', function ($query) {
+                    $query->where('is_trashed', false)
+                          ->where('is_active', true);
+                    if (Schema::hasColumn('users', 'is_active')) {
+                        $query->whereHas('user', function ($uq) {
+                            $uq->where('is_active', true);
+                        });
+                    } else {
+                        $query->whereHas('user');
+                    }
+                })
                 ->get() // Retrieve all results (not paginated initially)
                 ->groupBy('employee_id'); // Group by employee ID
         } else {

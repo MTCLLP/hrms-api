@@ -55,6 +55,7 @@ Route::group(
     function(){
 
         Route::post('/change-password', [ChangePasswordController::class, 'changePassword'])->name('change-password.api');
+        Route::post('/logout', [LoginController::class, 'logout'])->name('logout.api');
 
         Route::get('permissions',[PermissionController::class, 'index'])->name('api.permissions.index');
         Route::get('permissions/paginated',[PermissionController::class, 'paginated'])->name('api.permissions.paginated');
@@ -69,6 +70,8 @@ Route::group(
         Route::post('users',[UserController::class, 'store'])->name('api.users.store');
         Route::get('users/{user}',[UserController::class, 'show'])->name('api.users.show');
         Route::put('users/{user}',[UserController::class, 'update'])->name('api.users.update');
+        Route::patch('users/{user}/toggle-status',[UserController::class, 'toggleStatus'])->name('api.users.toggle-status');
+        Route::post('users/{user}/toggle-status',[UserController::class, 'toggleStatus'])->name('api.users.toggle-status.post');
         Route::delete('users/{id}',[UserController::class, 'destroy'])->name('api.users.destroy');
         Route::get('users-by-role/{roleName}',[UserController::class, 'getUserByRole'])->name('api.users.getUserByRole');
 

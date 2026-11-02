@@ -13,6 +13,7 @@ use Modules\RBAC\Events\UserRegistered;
 use Hash;
 use Carbon\Carbon;
 use DB;
+use Illuminate\Support\Facades\Schema;
 
 class EmployeesController extends Controller
 {
@@ -22,7 +23,16 @@ class EmployeesController extends Controller
      */
     public function index()
     {
-        $employees = Employee::where('is_trashed',false)->orderBy('created_at','desc')->get();
+        $query = Employee::where('is_trashed', false)
+            ->where('is_active', true);
+
+        if (Schema::hasColumn('users', 'is_active')) {
+            $query->whereHas('user', function ($q) {
+                $q->where('is_active', true);
+            });
+        }
+
+        $employees = $query->orderBy('created_at', 'desc')->get();
 
         return EmployeeResource::collection($employees);
     }
@@ -33,9 +43,16 @@ class EmployeesController extends Controller
      */
     public function paginated()
     {
-        // $employees = QueryBuilder::for(Employee::class)
-        // ->allowedIncludes(['user'])->where('is_trashed',false)->orderBy('created_at','desc')->paginate(10);
-        $employees = Employee::where('is_trashed',false)->orderBy('created_at','desc')->paginate(10);
+        $query = Employee::where('is_trashed', false)
+            ->where('is_active', true);
+
+        if (Schema::hasColumn('users', 'is_active')) {
+            $query->whereHas('user', function ($q) {
+                $q->where('is_active', true);
+            });
+        }
+
+        $employees = $query->orderBy('created_at', 'desc')->paginate(10);
 
         return EmployeeResource::collection($employees);
     }

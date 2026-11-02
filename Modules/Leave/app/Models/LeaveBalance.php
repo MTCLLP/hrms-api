@@ -16,7 +16,7 @@ class LeaveBalance extends Model
 {
     use BelongsToCalendarYear;
 
-    protected $fillable = ["leavetype_id","employee_id","balance_amount","is_active", "is_trashed", "created_by"];
+    protected $fillable = ["leavetype_id", "employee_id", "balance_amount", "is_active", "is_trashed", "created_by", "calendar_year_id"];
 
     public function employee()
     {

@@ -75,6 +75,16 @@ class LoginController extends Controller
 
 
             $user = Auth::user();
+
+            // Check if account is deactivated
+            if (isset($user->is_active) && !$user->is_active) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Your account has been deactivated. Please contact an administrator.',
+                    'errors' => ['Account' => ['Account has been deactivated.']]
+                ], 403);
+            }
+
             // Fetch employee details including department and superiors
             $employeeDetails = $this->getEmployeeDetails($user->id);
 
@@ -168,6 +178,15 @@ class LoginController extends Controller
             }
 
             $user = User::where('mobile', $request->mobile)->first();
+
+            if (isset($user->is_active) && !$user->is_active) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Your account has been deactivated. Please contact an administrator.',
+                    'errors' => ['Account' => ['Account has been deactivated.']]
+                ], 403);
+            }
+
             // Fetch employee details including department and superiors
             $employeeDetails = $this->getEmployeeDetails($user->id);
 
@@ -273,5 +292,26 @@ class LoginController extends Controller
         }
 
         return response()->json($responseData, 200);
+    }
+
+    public function logout(Request $request)
+    {
+        try {
+            $user = $request->user();
+            if ($user && $user->currentAccessToken()) {
+                $user->currentAccessToken()->delete();
+            }
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Logged out successfully',
+            ], 200);
+        } catch (\Throwable $th) {
+            return response()->json([
+                'status' => false,
+                'message' => 'An error occurred during logout.',
+                'error' => $th->getMessage()
+            ], 500);
+        }
     }
 }

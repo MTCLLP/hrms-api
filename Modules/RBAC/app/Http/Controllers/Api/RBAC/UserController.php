@@ -58,13 +58,18 @@ class UserController extends Controller
 
         $roles = $request['roles']; // retrieving the roles field
 
-        $user = User::create([
+        $userData = [
             'name'  =>  $request->name,
             'email' =>  $request->email,
             'mobile' => $request->mobile,
             'password'  =>  $request->password,
-            // 'activation_token'  =>  $activation_token,
-        ]);
+        ];
+
+        if ($request->has('is_active')) {
+            $userData['is_active'] = $request->boolean('is_active');
+        }
+
+        $user = User::create($userData);
 
         $token = $user->createToken("API TOKEN")->plainTextToken;
 
@@ -104,12 +109,20 @@ class UserController extends Controller
      */
     public function update(Request $request, User $user)
     {
-
         $input = $request->only(['name', 'email', 'mobile', 'password']); // retreive the name, email & password fields
+
+        if ($request->has('is_active')) {
+            $input['is_active'] = $request->boolean('is_active');
+        }
 
         $roles = $request['roles']; // retreive all roles
 
         $user->fill($input)->save();
+
+        if (isset($input['is_active']) && $user->employee) {
+            $user->employee->is_active = $input['is_active'];
+            $user->employee->save();
+        }
 
         if (isset($roles)) {
             $user->roles()->sync($roles); // if one or more role is selected associate user to roles
@@ -119,6 +132,47 @@ class UserController extends Controller
         }
 
         return new UserResource($user);
+    }
+
+    /**
+     * Activate or deactivate a user account.
+     * Only Administrator or Superadmin can perform this action.
+     *
+     * @param Request $request
+     * @param User $user
+     * @return Response
+     */
+    public function toggleStatus(Request $request, User $user)
+    {
+        $currentUser = auth()->user();
+
+        if (!$currentUser->hasRole(['Administrator', 'Superadmin'])) {
+            return response()->json(['message' => 'Unauthorized. Only administrators can change account status.'], 403);
+        }
+
+        if ($currentUser->id === $user->id) {
+            return response()->json(['message' => 'You cannot deactivate your own account.'], 400);
+        }
+
+        $newStatus = $request->has('is_active')
+            ? $request->boolean('is_active')
+            : !$user->is_active;
+
+        $user->is_active = $newStatus;
+        $user->save();
+
+        // Also sync the associated employee active status if present
+        if ($user->employee) {
+            $user->employee->is_active = $newStatus;
+            $user->employee->save();
+        }
+
+        $statusText = $newStatus ? 'activated' : 'deactivated';
+        return response()->json([
+            'status' => true,
+            'message' => "User account has been {$statusText} successfully.",
+            'data' => new UserResource($user),
+        ], 200);
     }
 
     /**

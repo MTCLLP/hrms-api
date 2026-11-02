@@ -26,6 +26,7 @@ class User extends JsonResource
             'mobile' => $this->mobile,
             'roles' => $this->roles,
             'permissions' => $this->permissions,
+            'is_active' => (bool) ($this->is_active ?? true),
             'employee' => $this->employee ? new EmployeeResource($this->employee) : null,
             'created_at'=>($this->created_at ? Carbon::parse($this->created_at)->diffForHumans() : null),
         ];

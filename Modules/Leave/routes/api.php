@@ -36,9 +36,11 @@ Route::group(
         Route::get('/leave-balance/trash', [LeaveBalanceController::class, 'trash'])->name('api.leave-balance.trash');
         Route::get('/leave-balance/restore/{id}', [LeaveBalanceController::class, 'restore'])->name('api.leave-balance.restore');
         Route::get('/leave-balance/get-leave-balance',[LeaveBalanceController::class, 'getLeaveBalance'])->name('api.leave-balance.get-leave-balance');
+        Route::get('/leave-balance/employee/{employeeId}', [LeaveBalanceController::class, 'getEmployeeBalances'])->name('api.leave-balance.get-employee-balances');
         Route::post('/leave-balance', [LeaveBalanceController::class, 'store'])->name('api.leave-balance.store');
         Route::get('/leave-balance/{leaveBalance}', [LeaveBalanceController::class, 'show'])->name('api.leave-balance.show');
         Route::patch('/leave-balance/{leaveBalance}', [LeaveBalanceController::class, 'update'])->name('api.leave-balance.update');
+        Route::put('/leave-balance/{leaveBalance}', [LeaveBalanceController::class, 'update'])->name('api.leave-balance.update-put');
         Route::delete('/leave-balance/{id}', [LeaveBalanceController::class, 'destroy'])->name('api.leave-balance.destroy');
         Route::post('/leave-balance-delete-multiple', [LeaveBalanceController::class, 'destroyMultiple'])->name('api.leave-balance.destroy-multiple');
 

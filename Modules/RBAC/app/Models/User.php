@@ -9,15 +9,22 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Spatie\Permission\Traits\HasRoles; // laravel spatie permission
 use Illuminate\Support\Facades\Hash; // laravel password hashing
 use Laravel\Sanctum\HasApiTokens; // laravel sanctum
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Modules\Employee\Models\Employee;
 
 class User extends Authenticatable
 {
+    use HasFactory;
     use Notifiable;
     use HasRoles; // laravel spatie permission
     use HasApiTokens; // laravel passport
 
     protected $guard_name = 'api';
+
+    protected static function newFactory()
+    {
+        return \Database\Factories\UserFactory::new();
+    }
 
 
     /**
@@ -26,7 +33,7 @@ class User extends Authenticatable
      * @var array
      */
     protected $fillable = [
-        'name', 'email', 'mobile', 'password'
+        'name', 'email', 'mobile', 'password', 'is_active'
     ];
 
     /**
@@ -45,6 +52,7 @@ class User extends Authenticatable
      */
     protected $casts = [
         'email_verified_at' => 'datetime',
+        'is_active' => 'boolean',
     ];
 
     /**
