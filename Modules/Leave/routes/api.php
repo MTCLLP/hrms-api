@@ -47,6 +47,8 @@ Route::group(
 
         Route::get('/leave-entitlement', [LeaveEntitlementController::class, 'index'])->name('api.leave-entitlement.index');
 		Route::get('/leave-entitlement/paginated', [LeaveEntitlementController::class, 'paginated'])->name('api.leave-entitlement.paginated');
+		Route::get('/leave-entitlement/employee/{employeeId}', [LeaveEntitlementController::class, 'getEmployeeEntitlements'])->name('api.leave-entitlement.employee');
+		Route::post('/leave-entitlement/update-employee', [LeaveEntitlementController::class, 'updateEmployeeEntitlements'])->name('api.leave-entitlement.update-employee');
 		Route::get('/leave-entitlement/trash', [LeaveEntitlementController::class, 'trash'])->name('api.leave-entitlement.trash');
 		Route::get('/leave-entitlement/restore/{id}', [LeaveEntitlementController::class, 'restore'])->name('api.leave-entitlement.restore');
         Route::post('/leave-entitlement', [LeaveEntitlementController::class, 'store'])->name('api.leave-entitlement.store');

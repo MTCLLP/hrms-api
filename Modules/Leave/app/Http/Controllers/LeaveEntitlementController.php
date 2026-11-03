@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Modules\Leave\Models\LeaveEntitlement;
 use Modules\Leave\Models\LeaveType;
 use Modules\Leave\Transformers\LeaveEntitlementResource;
+use Modules\Employee\Models\Employee;
 use Illuminate\Support\Facades\Schema;
 
 class LeaveEntitlementController extends Controller
@@ -102,10 +103,11 @@ class LeaveEntitlementController extends Controller
 
         // Populate actual values from entitlements
         foreach ($entitlements as $entitlement) {
-            $leaveType = $entitlement->leavetype->type_name; // Assuming 'type_name' exists
-            $balance = $entitlement->ent_amount;            // Get entitlement amount
-
-            $leaveSummary[$leaveType] = $balance;           // Add or update the value
+            $leaveType = $entitlement->leavetype ? $entitlement->leavetype->type_name : null;
+            if ($leaveType) {
+                $balance = (float) $entitlement->ent_amount;
+                $leaveSummary[$leaveType] = $balance;
+            }
         }
 
         return $leaveSummary;
@@ -116,66 +118,136 @@ class LeaveEntitlementController extends Controller
      *
      * @return Response
      */
-    public function paginated()
+    public function paginated(Request $request)
     {
         $user = auth()->user(); // Get the authenticated user
+        $perPage = (int) $request->get('per_page', 10);
+        $leaveTypes = LeaveType::pluck('type_name', 'id');
 
         if ($user->hasRole(['Administrator', 'Superadmin'])) {
-            // Admin: fetch all leave entitlements for active employees with active users
-            $leaveEntitlements = LeaveEntitlement::with(['employee.user'])
-                ->where('is_active', 1)
-                ->whereHas('employee', function ($query) {
-                    $query->where('is_trashed', false)
-                          ->where('is_active', true);
-                    if (Schema::hasColumn('users', 'is_active')) {
-                        $query->whereHas('user', function ($uq) {
-                            $uq->where('is_active', true);
-                        });
-                    } else {
-                        $query->whereHas('user');
-                    }
-                })
-                ->get() // Retrieve all results (not paginated initially)
-                ->groupBy('employee_id'); // Group by employee ID
-        } else {
-            // Employee: fetch leave entitlements for the specific employee
-            $employee = $user->employee; // Get the employee record associated with the user
+            // Admin: paginate active, non-trashed employees with active users
+            $employeeQuery = Employee::with('user')
+                ->where('employees.is_trashed', false)
+                ->where('employees.is_active', true);
 
-            if (! $employee) {
+            if (Schema::hasColumn('users', 'is_active')) {
+                $employeeQuery->whereHas('user', function ($uq) {
+                    $uq->where('is_active', true);
+                });
+            } else {
+                $employeeQuery->whereHas('user');
+            }
+
+            if ($request->filled('name')) {
+                $employeeQuery->whereHas('user', function ($uq) use ($request) {
+                    $uq->where('name', 'like', '%' . $request->name . '%');
+                });
+            }
+
+            $paginatedEmployees = $employeeQuery
+                ->join('users', 'employees.user_id', '=', 'users.id')
+                ->orderBy('users.name', 'asc')
+                ->select('employees.*')
+                ->paginate($perPage);
+
+            $employeeIds = $paginatedEmployees->pluck('id');
+
+            // Fetch entitlements for these employees
+            $entitlementQuery = LeaveEntitlement::with('leavetype')
+                ->whereIn('employee_id', $employeeIds)
+                ->where('is_active', 1);
+
+            if (Schema::hasColumn('leave_entitlements', 'is_trashed')) {
+                $entitlementQuery->where('is_trashed', 0);
+            }
+
+            if ($request->filled('startDate')) {
+                $entitlementQuery->whereDate('ent_start_date', '>=', $request->startDate);
+            }
+            if ($request->filled('endDate')) {
+                $entitlementQuery->whereDate('ent_end_date', '<=', $request->endDate);
+            }
+
+            $leaveEntitlements = $entitlementQuery->get()->groupBy('employee_id');
+
+            $result = [];
+            foreach ($paginatedEmployees as $employee) {
+                $entitlements = $leaveEntitlements->get($employee->id, collect());
+                $leaveSummary = $this->formatEntitlements($entitlements, $leaveTypes);
+
+                $result[] = [
+                    'id' => $employee->id,
+                    'employee_id' => $employee->id,
+                    'employee' => [
+                        'id' => $employee->id,
+                        'name' => $employee->user ? $employee->user->name : '',
+                    ],
+                    'leave_entitlements' => $leaveSummary,
+                ];
+            }
+
+            return response()->json([
+                'data' => $result,
+                'meta' => [
+                    'current_page' => $paginatedEmployees->currentPage(),
+                    'last_page' => $paginatedEmployees->lastPage(),
+                    'per_page' => $paginatedEmployees->perPage(),
+                    'total' => $paginatedEmployees->total(),
+                ],
+                'links' => [
+                    'first' => $paginatedEmployees->url(1),
+                    'last' => $paginatedEmployees->url($paginatedEmployees->lastPage()),
+                    'prev' => $paginatedEmployees->previousPageUrl(),
+                    'next' => $paginatedEmployees->nextPageUrl(),
+                ],
+            ]);
+        } else {
+            // Employee: fetch entitlements for the logged-in employee
+            $employee = $user->employee;
+
+            if (!$employee) {
                 abort(403, 'Employee record not found');
             }
 
-            $leaveEntitlements = LeaveEntitlement::where('employee_id', $employee->id)
-                ->where('is_active', 1)
-                ->paginate(10); // Paginate for employees
-        }
+            $entitlementQuery = LeaveEntitlement::with('leavetype')
+                ->where('employee_id', $employee->id)
+                ->where('is_active', 1);
 
-        // If Admin, handle grouped results manually
-        $result = [];
-        if ($user->hasRole('Administrator')) {
-            foreach ($leaveEntitlements as $employeeId => $entitlements) {
-                $firstEntitlement = $entitlements->first(); // Get first entitlement for employee details
-
-                // Prepare entitlement types and values
-                $leaveSummary = $this->formatEntitlements($entitlements);
-
-                $result[] = array_merge([
-                    'employee' => $firstEntitlement->employee, // Use the first record to get employee details
-                ], $leaveSummary);
+            if (Schema::hasColumn('leave_entitlements', 'is_trashed')) {
+                $entitlementQuery->where('is_trashed', 0);
             }
 
-            return response()->json($result); // Return grouped results
-        }
+            $entitlements = $entitlementQuery->get();
+            $leaveSummary = $this->formatEntitlements($entitlements, $leaveTypes);
 
-        // For employees, format and return directly paginated results
-        $result = [];
-        foreach ($leaveEntitlements as $entitlement) {
-            $result[] = array_merge([
-                'employee' => $entitlement->employee,
-            ], $this->formatEntitlements([$entitlement]));
-        }
+            $result = [
+                [
+                    'id' => $employee->id,
+                    'employee_id' => $employee->id,
+                    'employee' => [
+                        'id' => $employee->id,
+                        'name' => $user->name,
+                    ],
+                    'leave_entitlements' => $leaveSummary,
+                ]
+            ];
 
-        return response()->json($result);
+            return response()->json([
+                'data' => $result,
+                'meta' => [
+                    'current_page' => 1,
+                    'last_page' => 1,
+                    'per_page' => $perPage,
+                    'total' => 1,
+                ],
+                'links' => [
+                    'first' => null,
+                    'last' => null,
+                    'prev' => null,
+                    'next' => null,
+                ],
+            ]);
+        }
     }
 
     /**
@@ -220,6 +292,117 @@ class LeaveEntitlementController extends Controller
             'message' => 'Leave entitlements created successfully',
             'data' => $insertData,
         ], 201);
+    }
+
+    /**
+     * Get all leave types and the employee's current entitlements.
+     */
+    public function getEmployeeEntitlements($employeeId)
+    {
+        $user = auth()->user();
+        if (!$user->hasRole(['Administrator', 'Superadmin'])) {
+            if (!$user->employee || $user->employee->id != $employeeId) {
+                return response()->json(['message' => 'Unauthorized'], 403);
+            }
+        }
+
+        $employee = Employee::with('user')->findOrFail($employeeId);
+        $leaveTypes = LeaveType::all();
+
+        $query = LeaveEntitlement::where('employee_id', $employeeId)
+            ->where('is_active', 1);
+
+        if (Schema::hasColumn('leave_entitlements', 'is_trashed')) {
+            $query->where('is_trashed', 0);
+        }
+
+        $entitlements = $query->get()->keyBy('leavetype_id');
+
+        $firstEnt = $entitlements->first();
+        $entStartDate = $firstEnt ? $firstEnt->ent_start_date : (date('Y') . '-01-01');
+        $entEndDate = $firstEnt ? $firstEnt->ent_end_date : (date('Y') . '-12-31');
+
+        $result = [];
+        foreach ($leaveTypes as $type) {
+            $existing = $entitlements->get($type->id);
+            $result[] = [
+                'leavetype_id' => $type->id,
+                'type_name' => $type->type_name,
+                'ent_amount' => $existing ? (float) $existing->ent_amount : 0,
+                'id' => $existing ? $existing->id : null,
+            ];
+        }
+
+        return response()->json([
+            'employee' => [
+                'id' => $employee->id,
+                'name' => $employee->user ? $employee->user->name : '',
+            ],
+            'ent_start_date' => $entStartDate,
+            'ent_end_date' => $entEndDate,
+            'entitlements' => $result,
+        ]);
+    }
+
+    /**
+     * Upsert all leave entitlements for an employee.
+     */
+    public function updateEmployeeEntitlements(Request $request)
+    {
+        $user = auth()->user();
+        if (!$user->hasRole(['Administrator', 'Superadmin'])) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $request->validate([
+            'employee_id' => 'required|exists:employees,id',
+            'ent_start_date' => 'required|date',
+            'ent_end_date' => 'required|date|after_or_equal:ent_start_date',
+            'entitlements' => 'required|array',
+            'entitlements.*.leavetype_id' => 'required|exists:leave_types,id',
+            'entitlements.*.ent_amount' => 'required|numeric|min:0',
+        ]);
+
+        $employeeId = $request->input('employee_id');
+        $startDate = $request->input('ent_start_date');
+        $endDate = $request->input('ent_end_date');
+        $entitlements = $request->input('entitlements');
+
+        foreach ($entitlements as $item) {
+            $leaveTypeId = $item['leavetype_id'];
+            $amount = (float) $item['ent_amount'];
+
+            // Find existing active entitlement for employee and leavetype
+            $existing = LeaveEntitlement::where('employee_id', $employeeId)
+                ->where('leavetype_id', $leaveTypeId)
+                ->first();
+
+            if ($existing) {
+                $existing->ent_amount = $amount;
+                $existing->ent_start_date = $startDate;
+                $existing->ent_end_date = $endDate;
+                $existing->is_active = 1;
+                if (Schema::hasColumn('leave_entitlements', 'is_trashed')) {
+                    $existing->is_trashed = 0;
+                }
+                $existing->save();
+            } else {
+                LeaveEntitlement::create([
+                    'employee_id' => $employeeId,
+                    'leavetype_id' => $leaveTypeId,
+                    'ent_amount' => $amount,
+                    'ent_start_date' => $startDate,
+                    'ent_end_date' => $endDate,
+                    'created_by' => $user->id,
+                    'is_active' => 1,
+                    'is_trashed' => 0,
+                ]);
+            }
+        }
+
+        return response()->json([
+            'message' => 'Leave entitlements updated successfully',
+        ]);
     }
 
     /**
