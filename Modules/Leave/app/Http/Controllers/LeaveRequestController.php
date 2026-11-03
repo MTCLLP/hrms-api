@@ -18,6 +18,7 @@ use Modules\Leave\Models\LeaveType;
 use Modules\Leave\Models\LeaveEntitlement;
 use Modules\Leave\Models\LeaveBalance;
 use Modules\Leave\Models\LeaveApproval;
+use Modules\Employee\Models\Employee;
 use Modules\Employee\Models\JobReporting;
 use Carbon\Carbon;
 use Modules\Leave\Transformers\LeaveRequestResource as LeaveRequestResource;
@@ -175,12 +176,43 @@ class LeaveRequestController extends Controller
      */
     public function store(Request $request)
     {
-        $employeeId = auth()->user()->employee->id;
-        $employee = auth()->user()->employee;
+        $user = auth()->user();
+        $isPrivileged = $user->hasRole('Administrator') || $user->hasRole('Superadmin');
+
+        if ($isPrivileged && $request->filled('employee_id')) {
+            $employeeId = (int)$request->input('employee_id');
+            $employee = Employee::with('superiors.superiorDetails.user')->find($employeeId);
+            if (!$employee) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Employee not found',
+                    'errors' => ['Error' => ['Selected employee not found.']]
+                ], 404);
+            }
+        } else {
+            $employee = $user->employee;
+            if (!$employee) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Employee profile not found',
+                    'errors' => ['Error' => ['No employee profile associated with current account.']]
+                ], 404);
+            }
+            $employeeId = $employee->id;
+        }
 
         // Parse dates using Carbon
         $startDate = Carbon::parse($request->start_date);
         $endDate = Carbon::parse($request->end_date);
+
+        // Check for past dates - allowed for Superadmin / Administrator, blocked for regular employees
+        if (!$isPrivileged && $startDate->lt(Carbon::today())) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Past dates not allowed',
+                'errors' => ['Error' => ['Employees cannot apply for leaves on past dates. Please contact an administrator.']]
+            ], 422);
+        }
 
         // Check if start_date or end_date falls on a weekend
         if ($startDate->isWeekend() || $endDate->isWeekend()) {
@@ -232,7 +264,7 @@ class LeaveRequestController extends Controller
             $numberOfDays = (int)($startDate->diffInDays($endDate)) + 1;
         }
 
-        if ($numberOfDays > 5) {
+        if (!$isPrivileged && $numberOfDays > 5) {
             return response()->json([
                 'status' => false,
                 'message' => 'Too many leaves',
@@ -662,11 +694,22 @@ class LeaveRequestController extends Controller
      */
     public function update(Request $request, LeaveRequest $leaveRequest)
     {
-        $employeeId = auth()->user()->employee->id;
+        $user = auth()->user();
+        $isPrivileged = $user->hasRole('Administrator') || $user->hasRole('Superadmin');
+        $employeeId = $isPrivileged ? $leaveRequest->employee_id : ($user->employee ? $user->employee->id : null);
 
         // Parse dates using Carbon
         $startDate = Carbon::parse($request->start_date);
         $endDate = Carbon::parse($request->end_date);
+
+        // Check for past dates - allowed for Superadmin / Administrator, blocked for regular employees
+        if (!$isPrivileged && $startDate->lt(Carbon::today())) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Past dates not allowed',
+                'errors' => ['Error' => ['Employees cannot update leave to a past date. Please contact an administrator.']]
+            ], 422);
+        }
 
         // Check for overlapping leave requests
         $overlapQuery = LeaveRequest::where('employee_id', $employeeId)
@@ -694,7 +737,7 @@ class LeaveRequestController extends Controller
         $newNumberOfDays = $isHalfDay ? 0.5 : (int)($startDate->diffInDays($endDate)) + 1;
         $newLeaveTypeId = $request->input('selectedLeaveType');
 
-        if ($newNumberOfDays > 5) {
+        if (!$isPrivileged && $newNumberOfDays > 5) {
             return response()->json(['error' => 'You can only take 5 days of leave at once!.'], 400);
         }
 

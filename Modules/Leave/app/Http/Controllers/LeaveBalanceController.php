@@ -101,8 +101,12 @@ class LeaveBalanceController extends Controller
     /**
      * Format leave entitlements based on all leave types.
      */
-    private function formatBalances($balances, $leaveTypes)
+    private function formatBalances($balances, $leaveTypes = null)
     {
+        if (!$leaveTypes) {
+            $leaveTypes = LeaveType::pluck('type_name', 'id');
+        }
+
         $leaveSummary = [];
 
         // Initialize all leave types with 0
@@ -112,10 +116,10 @@ class LeaveBalanceController extends Controller
 
         // Populate actual values from entitlements
         foreach ($balances as $balance) {
-            $leaveType = $balance->leaveType->type_name; // Assuming 'type_name' exists
-            $balance = $balance->balance_amount;            // Get entitlement amount
-
-            $leaveSummary[$leaveType] = $balance;           // Add or update the value
+            $leaveType = $balance->leaveType ? $balance->leaveType->type_name : null;
+            if ($leaveType) {
+                $leaveSummary[$leaveType] = (float) $balance->balance_amount;
+            }
         }
 
         return $leaveSummary;
@@ -126,73 +130,142 @@ class LeaveBalanceController extends Controller
      *
      * @return Response
      */
-    public function paginated()
+    public function paginated(Request $request)
     {
         $user = auth()->user(); // Get the authenticated user
+        $perPage = (int) $request->get('per_page', 10);
+        $leaveTypes = LeaveType::pluck('type_name', 'id');
 
         if ($user->hasRole(['Administrator', 'Superadmin'])) {
-            // Admin: fetch all leave balances with pagination for active employees with active users
-            $query = LeaveBalance::with(['employee.user'])
-                ->where('is_active', 1)
-                ->whereHas('employee', function ($eq) {
-                    $eq->where('is_trashed', false)
-                       ->where('is_active', true);
-                    if (Schema::hasColumn('users', 'is_active')) {
-                        $eq->whereHas('user', function ($uq) {
-                            $uq->where('is_active', true);
-                        });
-                    } else {
-                        $eq->whereHas('user');
-                    }
+            // Admin: paginate active employees
+            $employeeQuery = Employee::with('user')
+                ->where('employees.is_trashed', false)
+                ->where('employees.is_active', true);
+
+            if (Schema::hasColumn('users', 'is_active')) {
+                $employeeQuery->whereHas('user', function ($uq) {
+                    $uq->where('is_active', true);
                 });
-
-            $leaveBalances = $query->get()->groupBy('employee_id');
-
-            // Prepare the result for all employees (no pagination for admin)
-            $result = [];
-            foreach ($leaveBalances as $employeeId => $balances) {
-                $firstBalance = $balances->first();
-                $employee = $firstBalance ? $firstBalance->employee : null;
-
-                if (!$employee || !$employee->user) {
-                    continue;
-                }
-
-                // Prepare balance types and values
-                $leaveSummary = $this->formatBalances($balances);
-
-                $result[] = array_merge([
-                    'id' => $employee->id,
-                    'employee_id' => $employee->id,
-                    'employee' => $employee,
-                ], $leaveSummary);
+            } else {
+                $employeeQuery->whereHas('user');
             }
 
-            return response()->json($result); // Return grouped results for admin
+            if ($request->filled('name')) {
+                $employeeQuery->whereHas('user', function ($uq) use ($request) {
+                    $uq->where('name', 'like', '%' . $request->name . '%');
+                });
+            }
+
+            $paginatedEmployees = $employeeQuery
+                ->join('users', 'employees.user_id', '=', 'users.id')
+                ->orderBy('users.name', 'asc')
+                ->select('employees.*')
+                ->paginate($perPage);
+
+            $employeeIds = $paginatedEmployees->pluck('id');
+
+            // Fetch balances for these employees in the current financial period
+            $activeYear = CalendarYear::where('is_active', 1)->first();
+            $calendarYearId = $request->input('calendar_year_id', $activeYear ? $activeYear->id : null);
+
+            $balanceQuery = LeaveBalance::withoutGlobalScopes()
+                ->whereIn('employee_id', $employeeIds)
+                ->where('is_active', 1);
+
+            if ($calendarYearId) {
+                $balanceQuery->where('calendar_year_id', $calendarYearId);
+            }
+
+            if (Schema::hasColumn('leave_balances', 'is_trashed')) {
+                $balanceQuery->where('is_trashed', 0);
+            }
+
+            $leaveBalances = $balanceQuery->with('leaveType')->get()->groupBy('employee_id');
+
+            $result = [];
+            foreach ($paginatedEmployees as $employee) {
+                $balances = $leaveBalances->get($employee->id, collect());
+                $leaveSummary = $this->formatBalances($balances, $leaveTypes);
+
+                $result[] = [
+                    'id' => $employee->id,
+                    'employee_id' => $employee->id,
+                    'employee' => [
+                        'id' => $employee->id,
+                        'name' => $employee->user ? $employee->user->name : '',
+                    ],
+                    'leave_balances' => $leaveSummary,
+                ];
+            }
+
+            return response()->json([
+                'data' => $result,
+                'meta' => [
+                    'current_page' => $paginatedEmployees->currentPage(),
+                    'last_page' => $paginatedEmployees->lastPage(),
+                    'per_page' => $paginatedEmployees->perPage(),
+                    'total' => $paginatedEmployees->total(),
+                ],
+                'links' => [
+                    'first' => $paginatedEmployees->url(1),
+                    'last' => $paginatedEmployees->url($paginatedEmployees->lastPage()),
+                    'prev' => $paginatedEmployees->previousPageUrl(),
+                    'next' => $paginatedEmployees->nextPageUrl(),
+                ],
+            ]);
         } else {
-            // Employee: fetch leave balances for the specific employee with pagination
-            $employee = $user->employee; // Get the employee record associated with the user
+            // Employee: fetch leave balances for the logged-in employee
+            $employee = $user->employee;
 
             if (! $employee) {
                 abort(403, 'Employee record not found');
             }
 
-            // Paginate the employee's leave balances
-            $leaveBalances = LeaveBalance::where('employee_id', $employee->id)
-                ->where('is_active', 1)
-                ->paginate(10);
+            $activeYear = CalendarYear::where('is_active', 1)->first();
+            $calendarYearId = $request->input('calendar_year_id', $activeYear ? $activeYear->id : null);
 
-            // Format and return paginated results
-            $result = [];
-            foreach ($leaveBalances as $balance) {
-                $result[] = array_merge([
-                    'id' => $balance->employee ? $balance->employee->id : $balance->id,
-                    'employee_id' => $balance->employee_id,
-                    'employee' => $balance->employee,
-                ], $this->formatBalances([$balance])); // Format each balance entry
+            $balanceQuery = LeaveBalance::withoutGlobalScopes()
+                ->where('employee_id', $employee->id)
+                ->where('is_active', 1);
+
+            if ($calendarYearId) {
+                $balanceQuery->where('calendar_year_id', $calendarYearId);
             }
 
-            return response()->json($result); // Return paginated results for employee
+            if (Schema::hasColumn('leave_balances', 'is_trashed')) {
+                $balanceQuery->where('is_trashed', 0);
+            }
+
+            $balances = $balanceQuery->with('leaveType')->get();
+            $leaveSummary = $this->formatBalances($balances, $leaveTypes);
+
+            $result = [
+                [
+                    'id' => $employee->id,
+                    'employee_id' => $employee->id,
+                    'employee' => [
+                        'id' => $employee->id,
+                        'name' => $user->name,
+                    ],
+                    'leave_balances' => $leaveSummary,
+                ]
+            ];
+
+            return response()->json([
+                'data' => $result,
+                'meta' => [
+                    'current_page' => 1,
+                    'last_page' => 1,
+                    'per_page' => $perPage,
+                    'total' => 1,
+                ],
+                'links' => [
+                    'first' => null,
+                    'last' => null,
+                    'prev' => null,
+                    'next' => null,
+                ],
+            ]);
         }
     }
 
